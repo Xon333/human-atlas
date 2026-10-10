@@ -4,6 +4,8 @@ An interactive 3D anatomy explorer built with React, Three.js, and shadcn/ui. Ta
 
 **[Explore the live demo](https://human-atlas-seven.vercel.app)**
 
+Both the full explorer and UNI study mode open with a dark interface and 3D stage from first paint. Anatomical system colours and teaching images retain their original colours.
+
 ## Explore
 
 - Orbit, zoom, and select structures directly on the body.
@@ -45,7 +47,7 @@ npm run build
 
 Validation covers mesh buffers, names and concept membership, nonoverlapping exploded layouts at desktop and mobile aspect ratios, search and inspection contracts, and tap-versus-drag handling. Browser interaction checks have exercised selection, system controls, search, isolation, rotation, and 390×844, 320×568, and 844×390 layouts. Phone controls stay clear of the exploded inventory, and isolated structures fit the space above or beside the detail panel. Physical-device performance and real multitouch hardware have not been tested.
 
-Course checks cover catalogue-byte identity, exact ordered mesh membership, multilingual/source contracts, unmapped-objective separation, reloadable links, private runtime boundaries, and accidental inclusion of local course files in public builds. These repeatable tests use public synthetic fixtures. The optional [browser checker](scripts/validate-browser.mjs) uses a locally available Playwright/Chromium installation and reads its test overlay from the private runtime; it writes results only to ignored local storage.
+Course checks cover catalogue-byte identity, exact ordered mesh membership, multilingual/source contracts, unmapped-objective separation, reloadable links, private runtime boundaries, and accidental inclusion of local course files in public builds. These repeatable tests use public synthetic fixtures. The optional [browser checker](scripts/validate-browser.mjs) uses a locally available Playwright/Chromium installation and reads its test overlay from the private runtime; it writes results only to ignored local storage. With that environment configured, `ATLAS_TEST_SCOPE=dark ATLAS_TEST_REQUIRE_COURSE=1 npm run test:browser` checks first paint, UI and portal contrast, source controls, keyboard focus, resized framing and highlighted targets versus neutral context. The default scope retains the complete interaction suite.
 
 ## Anatomy data
 

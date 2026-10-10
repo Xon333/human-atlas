@@ -4,15 +4,19 @@ Continue [PR #1](https://github.com/Xon333/human-atlas/pull/1) on `codex/uni-stu
 
 ## Cloud finish
 
-**The Atlas cloud owner implements dark mode in this PR.** At reviewed code commit `39ea4642`, [globals.css](../app/globals.css) forces a light palette and [scene.tsx](../app/scene.tsx) sets a light clear colour, ground and platform. A CSS-only dark shell would leave the stage light.
+**Complete in [code commit `b5d88acd`](https://github.com/Xon333/human-atlas/commit/b5d88acd1ad0585c6ebfb0404604efb0370c38ba).** The existing UNI mode and full explorer now use a near-black/charcoal interface and 3D stage from the first HTML paint, including browser controls, portalled search/About surfaces, mobile sheets and the clipboard fallback. Source links and the explode slider have visible keyboard focus; target selection and amber source/context cues remain distinct.
 
-Make the existing application dark by default from first paint: near-black/charcoal UI and stage, legible labels, visible borders/focus/hover/selection states, and consistent portalled menus/dialogs. Cover UNI and the full explorer. Preserve anatomy system colours, source-image pixels, laterality and the distinction between a highlighted target and neutral objective context. No new theme framework, settings service or elaborate theme picker is needed.
+This extends the existing implementation. The renderer changes only its clear colour, ground, platform, rings and inventory-marker styling. Anatomy system colours, lighting, the selection shader, source-image pixels, catalogue/model assets, GPU batching, picking, camera/explosion behaviour and course/runtime logic are unchanged. No theme framework, new dependencies, duplicate viewer or copied teaching material were added.
 
-**Extend, never reinvent.** Keep the renderer, model pipeline, catalogue identities, GPU batching, picking, camera/explosion interactions and existing components. Adjust stage styling in that renderer; do not replace it, reload models to change appearance, add another viewer, retranslate the atlas corpus or rebuild SpaceO/H5P. The existing schemaVersion 1 consumer and course selections remain the foundation.
+Fresh verification of that code:
 
-Complete code, scoped tests, browser/layout checks and documentation here. Run `npm run check`, `npm run build` and relevant existing regression checks after changes. Reuse [validate-browser.mjs](../scripts/validate-browser.mjs) and an available Playwright/Chromium installation; its environment options are in that file. Inspect dark UNI/explorer views, the smallest supported viewport, resized split-pane framing, source controls and no-highlight context. Do not weaken selection/framing assertions to make a theme pass. Private fixtures may live in ignored `.private-course/`, outside public inputs; do not commit them. Record actual limitations rather than treating synthetic media or software rendering as device acceptance.
+- `npm run check`, `npm run build`, 58 course checks, 15 runtime/privacy tests, and the existing atlas and interaction validators passed. The production build retains the existing chunk-size advisory.
+- The focused [browser checker](../scripts/validate-browser.mjs), run with `ATLAS_TEST_SCOPE=dark` and a required private test overlay, passed on Chromium 153.0.8010.0 with WebGL2/SwiftShader. It tested dark first paint with OS light preference and external scripts/stylesheets blocked; UNI/explorer, source controls, search/About portals, clipboard fallback and keyboard focus; and 1440×1000, 1024×768, 768×820, 390×844, 320×568 and 844×390 resizing. No uncaught page errors occurred.
+- Screenshot inspection and pixel checks confirmed visible selected geometry at every size and neutral surrounding geometry with **zero selection-tint pixels**. The original tint predicate and minimum geometry thresholds are unchanged; UI focus outlines are excluded from geometry measurements. The lowest sampled UI/source text contrast was 6.36:1.
 
-Update this section and PR #1 with the finished commit and evidence. Native workers receive only deployment and environment-specific checks. Preparatory native work can proceed now; final visual acceptance uses the completed dark-mode commit. A temporary light deployment does not close this task.
+Private screenshots, reports and fixtures remain ignored local test output. The original full integration/browser evidence is retained in PR #1; this run adds scoped dark-mode evidence. Cloud software rendering and the existing media stand-ins do not establish Safari, Obsidian, real-phone or real-source acceptance.
+
+**Only the deployment and device steps below remain.** Use the completed dark-mode commit or a descendant with the same application code for final acceptance; do not repeat cloud implementation, research or architecture. Keep subsequent source fixes with the cloud owner.
 
 ## OMV deployment
 
@@ -44,4 +48,4 @@ After SpaceO's reviewed content is present in the accepted Mac vault, test Safar
 
 Native workers own observed deployment/settings fixes. For a reproducible application bug, return the smallest evidence to the cloud source owner; do not redesign around it or repeat unrelated research. Rerun affected checks after fixes. Record private integration results once in SpaceO's continuation and only a non-sensitive deployment/device summary here. Preserve local work, SpaceO's sync hold and both unmerged main branches.
 
-Baseline verification remains the original PR's reported cloud evidence, not a new run: 58 course checks, 15 runtime/privacy tests and Chromium viewport checks. The 10 October handoff review changed documentation only; dark-mode implementation and native acceptance remain pending.
+Cloud implementation and scoped verification are complete at the commit above. OMV deployment, actual user-facing URLs, real teaching sources and Mac/Obsidian/device acceptance remain pending; record those observed results through the existing SpaceO coordination path.
