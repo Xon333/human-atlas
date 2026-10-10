@@ -1,6 +1,7 @@
 import type { Atlas, View } from './anatomy';
 import type { CourseOverlay } from './course';
 import { encodeCourseText, spaceoRoute, validateSpaceOPath } from './course.ts';
+import {regionElements, partSide, type StudySide, type StudyLayer} from './study-region.ts';
 
 export interface AtlasLink {
   mode: 'course' | 'explorer';
@@ -12,9 +13,12 @@ export interface AtlasLink {
   context?: boolean;
   view?: View;
   isolate?: boolean;
+  side?: StudySide;
+  layer?: StudyLayer;
 }
 export interface ResolvedAtlasLink extends AtlasLink {
   elements: string[];
+  scopeElements?: string[];
   // Surrounding anatomy is focused separately; it is never a highlighted objective.
   contextElements?: string[];
 }
@@ -33,12 +37,14 @@ function validateLink(link: AtlasLink): void {
   requireLink(link.mode === 'course' || link.mode === 'explorer', 'Unknown atlas view');
   for (const field of ['courseId', 'selectionId', 'structureId', 'meshId', 'objectiveId'] as const) if (link[field] !== undefined) nonempty(link[field], field);
   if (link.mode === 'course') requireLink(!!link.courseId, 'A course link requires courseId');
-  else requireLink(!link.courseId && !link.selectionId && !link.objectiveId && !link.context, 'Explorer links cannot contain course targets');
+  else requireLink(!link.courseId && !link.selectionId && !link.objectiveId && !link.context && !link.side && !link.layer, 'Explorer links cannot contain course targets');
   if (link.objectiveId) requireLink(!link.selectionId && !link.structureId && !link.meshId, 'An unmapped objective cannot also select a structure');
   requireLink(!link.context || !!link.objectiveId, 'Context is only available for an unmapped objective');
   requireLink(link.context === undefined || typeof link.context === 'boolean', 'Invalid context');
   requireLink(link.isolate === undefined || typeof link.isolate === 'boolean', 'Invalid isolate mode');
   requireLink(link.view === undefined || VIEWS.includes(link.view), 'Invalid camera view');
+  requireLink(link.side === undefined || ['right','left','both'].includes(link.side), 'Invalid regional side');
+  requireLink(link.layer === undefined || ['bones','muscles','all'].includes(link.layer), 'Invalid regional layer');
 }
 
 /** Empty hash means use the application default. Invalid links must be shown as errors, not silently retargeted. */
@@ -48,7 +54,7 @@ export function parseAtlasLink(hash: string): AtlasLink | null {
   requireLink(value.length <= 4096, 'Atlas link is too long');
   try { decodeURIComponent(value); } catch { throw new AtlasLinkError('Atlas link has invalid encoding'); }
   const parameters = new URLSearchParams(value);
-  const allowed = new Set(['course', 'explorer', 'selection', 'structure', 'mesh', 'objective', 'context', 'view', 'isolate']);
+  const allowed = new Set(['course', 'explorer', 'selection', 'structure', 'mesh', 'objective', 'context', 'view', 'isolate', 'side', 'layer']);
   for (const [key, entry] of parameters) {
     requireLink(allowed.has(key), `Unknown atlas link field ${key}`);
     requireLink(parameters.getAll(key).length === 1, `Duplicate atlas link field ${key}`);
@@ -62,6 +68,8 @@ export function parseAtlasLink(hash: string): AtlasLink | null {
   for (const [parameter, field] of [['course', 'courseId'], ['selection', 'selectionId'], ['structure', 'structureId'], ['mesh', 'meshId'], ['objective', 'objectiveId']] as const) {
     if (parameters.has(parameter)) link[field] = parameters.get(parameter)!;
   }
+  if (parameters.has('side')) link.side = parameters.get('side') as StudySide;
+  if (parameters.has('layer')) link.layer = parameters.get('layer') as StudyLayer;
   if (parameters.has('context')) link.context = true;
   if (parameters.has('view')) link.view = parameters.get('view') as View;
   if (parameters.has('isolate')) link.isolate = parameters.get('isolate') === '1';
@@ -72,6 +80,8 @@ export function serializeAtlasLink(link: AtlasLink): string {
   validateLink(link);
   const parameters: [string, string][] = [link.mode === 'course' ? ['course', link.courseId!] : ['explorer', '1']];
   for (const [field, parameter] of [['selectionId', 'selection'], ['structureId', 'structure'], ['meshId', 'mesh'], ['objectiveId', 'objective']] as const) if (link[field]) parameters.push([parameter, link[field]!]);
+  if (link.side) parameters.push(['side', link.side]);
+  if (link.layer) parameters.push(['layer', link.layer]);
   if (link.context) parameters.push(['context', '1']);
   if (link.view) parameters.push(['view', link.view]);
   if (link.isolate !== undefined) parameters.push(['isolate', link.isolate ? '1' : '0']);
@@ -80,7 +90,14 @@ export function serializeAtlasLink(link: AtlasLink): string {
 export function resolveAtlasLink(link: AtlasLink, atlas: Atlas, course: CourseOverlay | null): ResolvedAtlasLink {
   validateLink(link);
   let elements: string[] = [];
+  const part = link.meshId ? atlas.parts.find(item => item.id === link.meshId) : undefined;
+  const concept = link.structureId ? atlas.concepts.find(item => item.id === link.structureId) : undefined;
+  if (link.meshId) requireLink(part, `Unknown atlas mesh ${link.meshId}`);
+  if (link.structureId) requireLink(concept, `Unknown atlas structure ${link.structureId}`);
+  if (part && concept) requireLink(concept.elements.includes(part.id), 'This mesh does not belong to the linked structure');
   const selection = link.selectionId ? course?.selections.find(item => item.id === link.selectionId) : undefined;
+  let scopeElements: string[] | undefined;
+  let side = link.side, layer = link.layer;
   if (link.mode === 'course') {
     requireLink(course && link.courseId === course.courseId, 'This course is not available in this deployment');
     if (link.selectionId) requireLink(selection, `Unknown course selection ${link.selectionId}`);
@@ -89,27 +106,38 @@ export function resolveAtlasLink(link: AtlasLink, atlas: Atlas, course: CourseOv
       requireLink(objective, `Unknown course objective ${link.objectiveId}`);
       const context = course.selections.find(item => item.id === objective.contextSelectionId);
       requireLink(context, 'The objective has no valid context selection');
-      return { ...link, elements: [], ...(link.context ? { contextElements: [...context.elements] } : {}) };
+      const contextIds = context.region ? regionElements(atlas, context.region.elements, side ?? context.region.defaultSide, layer ?? context.region.defaultLayer) : context.elements;
+      return {...link, elements: [], ...(link.context ? {contextElements: [...contextIds]} : {})};
     }
-    if (selection) elements = [...selection.elements];
-  }
-  const concept = link.structureId ? atlas.concepts.find(item => item.id === link.structureId) : undefined;
-  if (link.structureId) {
-    requireLink(concept, `Unknown atlas structure ${link.structureId}`);
-    if (link.mode === 'course') {
-      requireLink(course!.concepts.some(item => item.id === concept.id), 'This structure is outside the prepared course overlay');
-      if (selection) requireLink(selection.conceptIds.includes(concept.id), 'This structure does not belong to the linked selection');
+    if (selection) {
+      const region = selection.region;
+      const allowed = region?.elements ?? selection.elements;
+      if (concept && !part) requireLink(concept.elements.every(id => allowed.includes(id)), 'This structure does not belong to the linked selection');
+      if (part) requireLink(allowed.includes(part.id), 'This mesh does not belong to the linked selection');
+      const targetIds = part ? [part.id] : concept?.elements ?? [];
+      const targetSides = new Set(atlas.parts.filter(item => targetIds.includes(item.id)).map(partSide).filter(Boolean));
+      side = side ?? (targetSides.size === 1 ? [...targetSides][0] ?? undefined : undefined) ?? region?.defaultSide;
+      layer = layer ?? region?.defaultLayer;
+      scopeElements = region ? regionElements(atlas, allowed, side ?? 'both', layer ?? 'all') : [...allowed];
+      if ((part && !scopeElements.includes(part.id)) || (concept && !concept.elements.some(id => scopeElements!.includes(id)))) {
+        // A link to a non-bone must not silently select nothing under the default bone layer.
+        requireLink(link.layer === undefined, 'The target is outside the selected layer or side');
+        layer = 'all';
+        scopeElements = region ? regionElements(atlas, allowed, side ?? 'both', layer) : [...allowed];
+      }
+      requireLink(scopeElements.length > 0, 'This regional view has no available meshes');
+      if (part) requireLink(scopeElements.includes(part.id), 'This mesh is outside the selected side');
+      if (concept) requireLink(concept.elements.some(id => scopeElements!.includes(id)), 'This structure is outside the selected side');
+      elements = [...selection.elements];
+    } else if (concept || part) {
+      // Old course links without a region remain limited to their authored course terms.
+      requireLink(course.concepts.some(item => concept ? item.id === concept.id : item.elements.includes(part!.id)), 'This structure is outside the prepared course overlay');
     }
-    elements = [...concept.elements];
   }
-  if (link.meshId) {
-    requireLink(atlas.parts.some(item => item.id === link.meshId), `Unknown atlas mesh ${link.meshId}`);
-    if (concept) requireLink(concept.elements.includes(link.meshId), 'This mesh does not belong to the linked structure');
-    if (selection) requireLink(selection.elements.includes(link.meshId), 'This mesh does not belong to the linked selection');
-    if (link.mode === 'course') requireLink(course!.concepts.some(item => item.elements.includes(link.meshId!)), 'This mesh is outside the prepared course overlay');
-    elements = [link.meshId];
-  }
-  return { ...link, elements };
+  if (concept) elements = [...concept.elements];
+  if (part) elements = [part.id];
+  if (scopeElements && (concept || part)) elements = elements.filter(id => scopeElements!.includes(id));
+  return {...link, ...(side ? {side} : {}), ...(layer ? {layer} : {}), elements, ...(scopeElements ? {scopeElements} : {})};
 }
 
 /** `file` includes the exact heading before URI encoding; the path is relative to the observed vault root. */

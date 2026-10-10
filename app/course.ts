@@ -1,4 +1,5 @@
 import type { Atlas, Concept } from './anatomy';
+import type {StudyRegion, StudySide, StudyLayer} from './study-region';
 
 export const SPACE_O_COURSE_ID = 'spaceo-uni-anatomija';
 export type Evidence = 'course-material' | 'student-reported-emphasis' | 'bonus';
@@ -20,6 +21,7 @@ export interface CourseConcept extends Concept {
   noteBindingIds: string[];
 }
 export interface CourseSelection {
+  region?: StudyRegion;
   id: string;
   label: string;
   conceptIds: string[];
@@ -233,7 +235,28 @@ export function validateCourseOverlay(input: unknown, atlas: Atlas, catalogBlobS
     const elements = strings(item.elements, `${id}.elements`);
     requireValue(equalList(elements, expectedElements), `${id}: selection meshes must be the ordered, deduplicated concept union`);
     const noteBindingIds = bindingIds(item.noteBindingIds, id);
-    return { id, label: text(item.label, `${id}.label`), conceptIds: ids, elements, noteBindingIds, evidence: evidence(item, noteBindingIds, id), ...(item.orderDescription !== undefined ? { orderDescription: text(item.orderDescription, `${id}.orderDescription`) } : {}) };
+    let region: StudyRegion | undefined;
+    if (item.region !== undefined) {
+      const input = object(item.region, `${id}.region`);
+      const regionConcepts = strings(input.conceptIds, `${id}.region.conceptIds`);
+      const expected: string[] = [];
+      const seen = new Set<string>();
+      for (const key of regionConcepts) {
+        const concept = catalogueConcepts.get(key);
+        requireValue(concept, `${id}: unknown regional catalogue concept ${key}`);
+        for (const mesh of concept.elements) {
+          requireValue(meshIds.has(mesh), `${id}: unknown regional mesh ${mesh}`);
+          if (!seen.has(mesh)) { seen.add(mesh); expected.push(mesh); }
+        }
+      }
+      const regionMeshes = strings(input.elements, `${id}.region.elements`);
+      requireValue(equalList(regionMeshes, expected), `${id}: regional meshes must match their catalogue union`);
+      requireValue(elements.every(mesh => seen.has(mesh)), `${id}: region must contain every taught target`);
+      requireValue(['right','left','both'].includes(input.defaultSide as string), `${id}: invalid regional side`);
+      requireValue(['bones','muscles','all'].includes(input.defaultLayer as string), `${id}: invalid regional layer`);
+      region = {conceptIds: regionConcepts, elements: regionMeshes, defaultSide: input.defaultSide as StudySide, defaultLayer: input.defaultLayer as StudyLayer};
+    }
+    return { id, label: text(item.label, `${id}.label`), conceptIds: ids, elements, noteBindingIds, evidence: evidence(item, noteBindingIds, id), ...(region ? {region} : {}), ...(item.orderDescription !== undefined ? { orderDescription: text(item.orderDescription, `${id}.orderDescription`) } : {}) };
   });
   requireValue(selectedConcepts.size === conceptIds.size, 'Some course concepts are unused by selections');
   const objectiveIds = new Set<string>();

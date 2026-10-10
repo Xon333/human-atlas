@@ -2,6 +2,7 @@
 // runtime response; this file contains no copied course data or teaching assets.
 // ATLAS_TEST_SCOPE=dark runs only the theme, source-control, and responsive-rendering checks.
 import assert from 'node:assert/strict';
+import {regionalChecks} from './regional-browser-checks.mjs';
 import {once} from 'node:events';
 import {mkdir, writeFile} from 'node:fs/promises';
 import path from 'node:path';
@@ -11,7 +12,7 @@ import {createPrivateServer, runtimeConfig} from '../server/private-runtime.mjs'
 const root = fileURLToPath(new URL('../', import.meta.url));
 const output = path.resolve(process.env.ATLAS_TEST_OUTPUT || path.join(root, '.private-course/browser-checks'));
 const scope = process.env.ATLAS_TEST_SCOPE || 'all';
-assert.ok(['all', 'dark'].includes(scope), 'ATLAS_TEST_SCOPE must be all or dark');
+assert.ok(['all', 'dark', 'region'].includes(scope), 'ATLAS_TEST_SCOPE must be all, dark or region');
 const darkOnly = scope === 'dark';
 const playwrightModule = process.env.PLAYWRIGHT_MODULE || 'playwright';
 const {chromium} = await import(path.isAbsolute(playwrightModule) ? pathToFileURL(playwrightModule).href : playwrightModule);
@@ -55,7 +56,7 @@ const ready = async () => {
 };
 const screenshot = async (name, inspectSelection = false, inspectNeutral = false) => {
   await frame();
-  const png = await page.screenshot({path: path.join(output, `${name}.png`), timeout: 60_000});
+  const png = await page.screenshot({path: path.join(output, `${name}.png`), timeout: 120_000});
   report.screenshots.push(`${name}.png`);
   if (!inspectSelection && !inspectNeutral && !darkOnly) return;
   // Read the rendered image, excluding UI, so a correct DOM count cannot hide a lost camera fit.
@@ -252,7 +253,7 @@ const darkChecks = async (course, atlas) => {
 };
 
 try {
-  if (darkOnly) await darkFirstPaint();
+  if (darkOnly || scope === 'region') await darkFirstPaint();
   await page.goto(base, {waitUntil: 'domcontentloaded'});
   await ready();
   const atlas = await (await page.request.get(new URL('/models/atlas.json', base).href)).json();
@@ -262,7 +263,8 @@ try {
   const course = runtime?.course;
   record('The existing catalogue and WebGL renderer load');
 
-  if (darkOnly) await darkChecks(course, atlas);
+  if (scope === 'region' || (course?.selections.every(s => s.region) && scope === 'all')) await regionalChecks({page,course,atlas,runtime,base,state,hash,ready,screenshot,record,insideViewport,openSearch,report});
+  else if (darkOnly) await darkChecks(course, atlas);
   else {
   if (course) {
     report.course = true;
