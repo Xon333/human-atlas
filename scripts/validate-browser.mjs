@@ -18,6 +18,8 @@ assert.ok(['all', 'dark', 'region', 'resource'].includes(scope), 'ATLAS_TEST_SCO
 const darkOnly = scope === 'dark';
 const inspectDark = scope === 'dark' || scope === 'all';
 const resourceOnly = scope === 'resource';
+const minimumGpuFrameMs = Number(process.env.ATLAS_TEST_GPU_FRAME_MS || 0);
+assert.ok(Number.isFinite(minimumGpuFrameMs) && minimumGpuFrameMs >= 0 && minimumGpuFrameMs <= 5000, 'ATLAS_TEST_GPU_FRAME_MS must be between 0 and 5000');
 const playwrightModule = process.env.PLAYWRIGHT_MODULE || 'playwright';
 const {chromium} = await import(path.isAbsolute(playwrightModule) ? pathToFileURL(playwrightModule).href : playwrightModule);
 await mkdir(output, {recursive: true});
@@ -40,7 +42,7 @@ const browser = await chromium.launch({
 const context = await browser.newContext({viewport: {width: 1440, height: 1000}, reducedMotion: 'reduce', colorScheme: 'light'});
 // Exercise the supported fallback used when clipboard access is unavailable on a private HTTP origin.
 await context.addInitScript(() => Object.defineProperty(navigator, 'clipboard', {configurable: true, get: () => undefined}));
-await context.addInitScript(() => {
+await context.addInitScript(({minimumGpuFrameMs}) => {
   // Test-only instrumentation: no renderer debug API, production polling, or new dependency.
   const probe = window.__atlasResourceProbe = {callbacks: 0, draws: 0, triangles: 0, frames: 0, stamp: 0, drawnStamp: -1, lastDrawAt: 0, pending: new Set()};
   const request = window.requestAnimationFrame.bind(window), cancel = window.cancelAnimationFrame.bind(window);
@@ -49,6 +51,17 @@ await context.addInitScript(() => {
     probe.pending.add(id); return id;
   };
   window.cancelAnimationFrame = id => {probe.pending.delete(id); cancel(id);};
+  // Slow-GPU regression: delay only the test's observation of an existing fence.
+  // The real GPU must still signal completion; geometry, draws and timeouts stay unchanged.
+  if (minimumGpuFrameMs && window.WebGL2RenderingContext) {
+    const gl = window.WebGL2RenderingContext.prototype, submitted = new WeakMap();
+    const fenceSync = gl.fenceSync, clientWaitSync = gl.clientWaitSync;
+    gl.fenceSync = function (...args) {const fence = fenceSync.apply(this, args); if (fence) submitted.set(fence, performance.now()); return fence;};
+    gl.clientWaitSync = function (fence, ...args) {
+      const at = submitted.get(fence);
+      return at !== undefined && performance.now() - at < minimumGpuFrameMs ? this.TIMEOUT_EXPIRED : clientWaitSync.call(this, fence, ...args);
+    };
+  }
   for (const type of [window.WebGLRenderingContext, window.WebGL2RenderingContext].filter(Boolean)) {
     for (const name of ['drawArrays', 'drawElements', 'drawArraysInstanced', 'drawElementsInstanced']) {
       if (!Object.hasOwn(type.prototype, name)) continue;
@@ -62,7 +75,7 @@ await context.addInitScript(() => {
       };
     }
   }
-});
+}, {minimumGpuFrameMs});
 const page = await context.newPage();
 page.setDefaultTimeout(30_000);
 page.setDefaultNavigationTimeout(60_000);
@@ -289,7 +302,7 @@ const darkChecks = async (course, atlas) => {
 
 const resourceChecks = async atlas => {
   const baseline = process.env.ATLAS_RESOURCE_BASELINE === '1';
-  report.resource = {baseline, viewport: page.viewportSize(), note: 'Headless rendering work only; these are not Mac RAM, energy, or device FPS measurements.', measurements: {}};
+  report.resource = {baseline, viewport: page.viewportSize(), minimumGpuFrameMs, note: 'Headless rendering work only; these are not Mac RAM, energy, or device FPS measurements.', measurements: {}};
   const read = () => page.evaluate(() => {
     const p = window.__atlasResourceProbe;
     return {callbacks: p.callbacks, draws: p.draws, triangles: p.triangles, frames: p.frames, pending: p.pending.size, at: performance.now()};

@@ -11,6 +11,17 @@ export class VisibleFrameClock {
   reset(): void { this.previous = null; }
 }
 
+/** Three r159 scales autorotation by seconds but applies damping once per call.
+ * Compose its nominal 60 Hz decay for this visible frame only. Native input and
+ * explicit camera fits also call update() and must retain their original factor.
+ */
+export function updateVisibleControls(controls: {dampingFactor: number; update: (seconds: number) => boolean}, elapsed: number): boolean {
+  const damping = controls.dampingFactor, seconds = Math.max(0, elapsed);
+  controls.dampingFactor = 1 - Math.pow(1 - damping, seconds * 60);
+  try { return controls.update(seconds); }
+  finally { controls.dampingFactor = damping; }
+}
+
 /** Coalesce new scene state while one WebGL2 frame is still on the GPU.
  * Calls never block the main thread. WebGL1 and failed fences retain the normal
  * renderer path; callers decide when work is needed, so this owns no idle timer.
