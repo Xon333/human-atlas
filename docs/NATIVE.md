@@ -1,5 +1,7 @@
 # UNI Atlas — cloud finish and native handoff
 
+For the separate resource-consumption branch, follow [the resource native finish](RESOURCE-CONSUMPTION.md). The UNI instructions and earlier evidence below describe its unchanged integration baseline.
+
 Continue [PR #1](https://github.com/Xon333/human-atlas/pull/1) on `codex/uni-study-mode-2026-10-10`; fetch the latest head and preserve later changes. Do not restart from main or open a competing implementation. [SpaceO's continuation](https://github.com/Xon333/SpaceO/blob/codex/uni-course-integration-2026-10-10/.spaceo/uni/CONTINUE.md) owns cross-repository coordination and the private acceptance record. This file owns remaining Atlas work; [course-runtime.md](course-runtime.md) owns configuration and route syntax.
 
 ## Cloud finish

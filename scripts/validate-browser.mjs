@@ -1,6 +1,7 @@
 // Optional real-browser regression check. Course expectations come from the private
 // runtime response; this file contains no copied course data or teaching assets.
 // ATLAS_TEST_SCOPE=dark runs only the theme, source-control, and responsive-rendering checks.
+// ATLAS_TEST_SCOPE=resource checks on-demand rendering; ATLAS_RESOURCE_BASELINE=1 only records its older baseline.
 import assert from 'node:assert/strict';
 import {once} from 'node:events';
 import {mkdir, writeFile} from 'node:fs/promises';
@@ -11,8 +12,9 @@ import {createPrivateServer, runtimeConfig} from '../server/private-runtime.mjs'
 const root = fileURLToPath(new URL('../', import.meta.url));
 const output = path.resolve(process.env.ATLAS_TEST_OUTPUT || path.join(root, '.private-course/browser-checks'));
 const scope = process.env.ATLAS_TEST_SCOPE || 'all';
-assert.ok(['all', 'dark'].includes(scope), 'ATLAS_TEST_SCOPE must be all or dark');
+assert.ok(['all', 'dark', 'resource'].includes(scope), 'ATLAS_TEST_SCOPE must be all, dark, or resource');
 const darkOnly = scope === 'dark';
+const resourceOnly = scope === 'resource';
 const playwrightModule = process.env.PLAYWRIGHT_MODULE || 'playwright';
 const {chromium} = await import(path.isAbsolute(playwrightModule) ? pathToFileURL(playwrightModule).href : playwrightModule);
 await mkdir(output, {recursive: true});
@@ -35,6 +37,29 @@ const browser = await chromium.launch({
 const context = await browser.newContext({viewport: {width: 1440, height: 1000}, reducedMotion: 'reduce', colorScheme: 'light'});
 // Exercise the supported fallback used when clipboard access is unavailable on a private HTTP origin.
 await context.addInitScript(() => Object.defineProperty(navigator, 'clipboard', {configurable: true, get: () => undefined}));
+if (resourceOnly) await context.addInitScript(() => {
+  // Test-only instrumentation: no renderer debug API, production polling, or new dependency.
+  const probe = window.__atlasResourceProbe = {callbacks: 0, draws: 0, triangles: 0, frames: 0, stamp: 0, drawnStamp: -1, lastDrawAt: 0, pending: new Set()};
+  const request = window.requestAnimationFrame.bind(window), cancel = window.cancelAnimationFrame.bind(window);
+  window.requestAnimationFrame = callback => {
+    const id = request(time => {probe.pending.delete(id); probe.callbacks++; probe.stamp = time; callback(time);});
+    probe.pending.add(id); return id;
+  };
+  window.cancelAnimationFrame = id => {probe.pending.delete(id); cancel(id);};
+  for (const type of [window.WebGLRenderingContext, window.WebGL2RenderingContext].filter(Boolean)) {
+    for (const name of ['drawArrays', 'drawElements', 'drawArraysInstanced', 'drawElementsInstanced']) {
+      if (!Object.hasOwn(type.prototype, name)) continue;
+      const draw = type.prototype[name];
+      type.prototype[name] = function (...args) {
+        probe.draws++; probe.lastDrawAt = performance.now();
+        if (probe.drawnStamp !== probe.stamp) {probe.frames++; probe.drawnStamp = probe.stamp;}
+        const count = args[name.startsWith('drawArrays') ? 2 : 1], instances = name.endsWith('Instanced') ? args.at(-1) : 1;
+        if (args[0] === this.TRIANGLES) probe.triangles += count / 3 * instances;
+        return draw.apply(this, args);
+      };
+    }
+  }
+});
 const page = await context.newPage();
 page.setDefaultTimeout(30_000);
 page.setDefaultNavigationTimeout(60_000);
@@ -251,9 +276,85 @@ const darkChecks = async (course, atlas) => {
   record('The full explorer, its controls, and isolated geometry remain usable on the dark 3D stage');
 };
 
+const resourceChecks = async atlas => {
+  const baseline = process.env.ATLAS_RESOURCE_BASELINE === '1';
+  report.resource = {baseline, viewport: page.viewportSize(), note: 'Headless rendering work only; these are not Mac RAM, energy, or device FPS measurements.', measurements: {}};
+  const read = () => page.evaluate(() => {
+    const p = window.__atlasResourceProbe;
+    return {callbacks: p.callbacks, draws: p.draws, triangles: p.triangles, frames: p.frames, pending: p.pending.size, at: performance.now()};
+  });
+  const measure = async (name, action = async () => {}, expectDraw = false) => {
+    const before = await read(); await action();
+    if (expectDraw) await page.waitForFunction(draws => window.__atlasResourceProbe.draws > draws, before.draws, {polling: 100, timeout: 30_000});
+    await page.waitForTimeout(1000); const after = await read();
+    const result = Object.fromEntries(['callbacks', 'draws', 'triangles', 'frames'].map(key => [key, after[key] - before[key]]));
+    Object.assign(result, {milliseconds: Math.round(after.at - before.at), pending: after.pending, drawsPerFrame: result.frames ? result.draws / result.frames : 0, trianglesPerFrame: result.frames ? result.triangles / result.frames : 0});
+    report.resource.measurements[name] = result; console.log(`RESOURCE ${name} ${JSON.stringify(result)}`); return result;
+  };
+  const quiet = async name => {
+    // Timer polling belongs only to this bounded test, so it cannot create measured animation callbacks.
+    await page.waitForFunction(baseline => performance.now() - window.__atlasResourceProbe.lastDrawAt > 600 && (baseline || window.__atlasResourceProbe.pending.size === 0), baseline, {polling: 100, timeout: 30_000});
+    const value = await measure(name);
+    if (!baseline) assert.ok(value.callbacks === 0 && value.draws === 0 && value.pending === 0, `${name} must have no idle animation work: ${JSON.stringify(value)}`);
+    return value;
+  };
+  const advances = async (name, action) => {const value = await measure(name, action, true); assert.ok(value.draws > 0, `${name} must render`); return value;};
+  const centerFrame = () => page.screenshot({clip: {x: 500, y: 210, width: 430, height: 530}});
+  const moves = async (name, action) => {const before = await centerFrame(); await advances(name, action); await quiet(`${name}-idle`); assert.ok(!before.equals(await centerFrame()), `${name} must change the rendered anatomy`);};
+  await state('data-mode', 'explorer'); await quiet('default-idle');
+  const full = await advances('default-camera', () => page.getByRole('button', {name: 'front view', exact: true}).click());
+  await quiet('default-camera-idle');
+  await advances('skeleton-change', () => page.getByRole('button', {name: 'Skeleton', exact: true}).click());
+  await quiet('skeleton-idle');
+  if (baseline) {record('Baseline idle callbacks and default/skeleton draw work recorded at the same viewport'); return;}
+  await page.getByRole('button', {name: 'Rotate body', exact: true}).click();
+  const skeleton = await advances('skeleton-rotation');
+  if (!baseline) assert.ok(skeleton.trianglesPerFrame < full.trianglesPerFrame && skeleton.drawsPerFrame < full.drawsPerFrame, 'Hidden systems must reduce submitted geometry and draw calls');
+  for (const [name, property, value] of [['hidden', 'display', 'none'], ['offscreen', 'transform', 'translateX(200vw)']]) {
+    await page.locator('.scene').evaluate((element, {property, value}) => {element.style[property] = value;}, {property, value});
+    await page.waitForFunction(() => window.__atlasResourceProbe.pending.size === 0, null, {polling: 100, timeout: 30_000});
+    const suspended = await measure(`${name}-rotation`);
+    if (!baseline) assert.ok(suspended.callbacks === 0 && suspended.draws === 0 && suspended.pending === 0, `${name} stage must suspend rotation`);
+    await advances(`${name}-resume`, () => page.locator('.scene').evaluate((element, property) => {element.style[property] = '';}, property));
+  }
+  await page.getByRole('button', {name: 'Pause rotation', exact: true}).click(); await quiet('rotation-stopped');
+  await moves('camera-change', () => page.getByRole('button', {name: 'side view', exact: true}).click());
+  await moves('orbit', async () => {await page.mouse.move(780, 440); await page.mouse.down(); await page.mouse.move(860, 470, {steps: 8}); await page.mouse.up();});
+  await moves('zoom', async () => {await page.mouse.move(740, 430); await page.mouse.wheel(0, -180);});
+  await moves('explode', async () => {await page.getByRole('slider').focus(); await page.getByRole('slider').press('End');});
+  assert.equal(await page.getByRole('slider').inputValue(), '100');
+  // Keep the fixed skeleton for both animation directions, avoiding unrelated full-system work.
+  await advances('assemble', () => page.getByRole('slider').press('Home')); await quiet('assembled-idle');
+  await advances('reset', () => page.getByRole('button', {name: 'Assemble and reset', exact: true}).click()); await quiet('reset-idle');
+  await page.getByRole('button', {name: 'Hide all', exact: true}).click(); await quiet('hidden-systems-idle');
+  const femur = atlas.concepts.find(concept => concept.name.toLowerCase() === 'femur');
+  await openSearch(femur.name);
+  const selected = await advances('hidden-layer-selection', () => page.getByRole('option').first().click());
+  await state('data-selected-count', femur.elements.length); await quiet('selection-idle');
+  if (!baseline) assert.ok(selected.trianglesPerFrame < skeleton.trianglesPerFrame, 'A selected part must restore only its required batch');
+  await screenshot('resource-hidden-layer-selection', true);
+  await advances('isolate-selection', () => page.getByRole('button', {name: 'Isolate structure', exact: true}).click()); await quiet('isolated-idle');
+  const rendered = await screenshot('resource-isolated-selection', true);
+  await page.mouse.click(rendered.sample.x, rendered.sample.y); await state('data-selected-count', 1); await quiet('picked-idle');
+  assert.ok(femur.elements.includes(params().get('mesh')), 'The shared geometry must preserve exact picking');
+  record('Resource lifecycle, camera/orbit/zoom/explosion, hidden-layer highlight, isolation, and exact picking remain functional');
+  if (!baseline) {
+    let release, intercepted;
+    const waiting = new Promise(resolve => {release = resolve;}), requested = new Promise(resolve => {intercepted = resolve;});
+    await page.route(/\/models\/body-\d+\.bin(?:\.gz)?$/, async route => {intercepted(); await waiting; await route.continue().catch(() => {});});
+    await page.reload({waitUntil: 'domcontentloaded'}); await page.locator('.scene canvas').waitFor(); await requested;
+    // Exercise the real error handler before delayed model downloads can report 100%.
+    await page.locator('.scene canvas').evaluate(canvas => canvas.dispatchEvent(new Event('webglcontextlost', {cancelable: true})));
+    release(); await page.locator('.loading.error').waitFor(); await quiet('context-lost-during-load');
+    assert.match(await page.locator('.loading.error').innerText(), /paused.*Reload/s);
+    record('Context loss during a delayed model load keeps the reload message and stops animation callbacks');
+  }
+};
+
 try {
   if (darkOnly) await darkFirstPaint();
-  await page.goto(base, {waitUntil: 'domcontentloaded'});
+  if (resourceOnly) await hash({explorer: '1'});
+  else await page.goto(base, {waitUntil: 'domcontentloaded'});
   await ready();
   const atlas = await (await page.request.get(new URL('/models/atlas.json', base).href)).json();
   const response = await page.request.get(new URL('/api/course', base).href);
@@ -262,7 +363,8 @@ try {
   const course = runtime?.course;
   record('The existing catalogue and WebGL renderer load');
 
-  if (darkOnly) await darkChecks(course, atlas);
+  if (resourceOnly) await resourceChecks(atlas);
+  else if (darkOnly) await darkChecks(course, atlas);
   else {
   if (course) {
     report.course = true;
@@ -496,7 +598,7 @@ try {
   console.log(`Browser checks complete. Local screenshots/report: ${output}`);
 } catch (error) {
   await page.screenshot({path: path.join(output, 'failed.png'), timeout: 60_000}).catch(() => {});
-  await writeFile(path.join(output, 'failure.json'), `${JSON.stringify({error: error.message, pageErrors, completed: report.checks}, null, 2)}\n`);
+  await writeFile(path.join(output, 'failure.json'), `${JSON.stringify({error: error.message, pageErrors, completed: report.checks, resource: report.resource}, null, 2)}\n`);
   throw error;
 } finally {
   await browser.close();
