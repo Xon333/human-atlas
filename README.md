@@ -13,6 +13,14 @@ An interactive 3D anatomy explorer built with React, Three.js, and shadcn/ui. Ta
 - Isolate a selected structure and read its details.
 - Use compact controls and detail panels on mobile.
 
+## UNI study mode
+
+An optional private runtime connects the existing atlas to SpaceO's validated anatomy course overlay. A configured deployment opens directly into its prepared selections, with ordered Slovenian/Latin/English terms, explicit laterality, exact mesh selection, source-backed evidence labels, and links to the original notes and teaching sources. The full explorer remains one click away.
+
+Objectives without verified model geometry are identified in their original sources. Their optional context view shows surrounding bones in their normal material, with **no target highlight**. Course data stays in SpaceO or ignored local runtime inputs; it is never part of the public static build.
+
+See [runtime configuration and scene links](docs/course-runtime.md). The implementation's remaining Mac/OMV work is bounded by [the native handoff](docs/NATIVE.md).
+
 ## Run locally
 
 Requires Node.js 22.13 or newer. No API keys or accounts are needed.
@@ -30,10 +38,14 @@ Open http://localhost:3016. To build the static site, run `npm run build`; the o
 npm run check
 node scripts/validate-atlas.mjs
 node scripts/validate-interactions.mjs
+npm run test:course
+npm run test:runtime
 npm run build
 ```
 
 Validation covers mesh buffers, names and concept membership, nonoverlapping exploded layouts at desktop and mobile aspect ratios, search and inspection contracts, and tap-versus-drag handling. Browser interaction checks have exercised selection, system controls, search, isolation, rotation, and 390×844, 320×568, and 844×390 layouts. Phone controls stay clear of the exploded inventory, and isolated structures fit the space above or beside the detail panel. Physical-device performance and real multitouch hardware have not been tested.
+
+Course checks cover catalogue-byte identity, exact ordered mesh membership, multilingual/source contracts, unmapped-objective separation, reloadable links, private runtime boundaries, and accidental inclusion of local course files in public builds. These repeatable tests use public synthetic fixtures. The optional [browser checker](scripts/validate-browser.mjs) uses a locally available Playwright/Chromium installation and reads its test overlay from the private runtime; it writes results only to ignored local storage.
 
 ## Anatomy data
 

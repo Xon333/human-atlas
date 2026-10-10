@@ -9,7 +9,12 @@
     "dev": "vite --host 0.0.0.0 --port 3016",
     "build": "vite build",
     "build:vercel": "vite build",
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit",
+    "serve:private": "node --experimental-strip-types server/private-runtime.mjs",
+    "test:runtime": "node --experimental-strip-types --test scripts/private-runtime.test.mjs scripts/private-build-guard.test.mjs",
+    "test:course": "node --experimental-strip-types scripts/validate-course.mjs",
+    "test:browser": "node --experimental-strip-types scripts/validate-browser.mjs",
+    "course:links": "node --experimental-strip-types scripts/course-links.mjs"
   },
   "dependencies": {
     "@base-ui/react": "1.7.0",
