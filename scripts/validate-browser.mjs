@@ -1,5 +1,6 @@
 // Optional real-browser regression check. Course expectations come from the private
 // runtime response; this file contains no copied course data or teaching assets.
+// ATLAS_TEST_SCOPE=dark runs only the theme, source-control, and responsive-rendering checks.
 import assert from 'node:assert/strict';
 import {once} from 'node:events';
 import {mkdir, writeFile} from 'node:fs/promises';
@@ -9,6 +10,9 @@ import {createPrivateServer, runtimeConfig} from '../server/private-runtime.mjs'
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const output = path.resolve(process.env.ATLAS_TEST_OUTPUT || path.join(root, '.private-course/browser-checks'));
+const scope = process.env.ATLAS_TEST_SCOPE || 'all';
+assert.ok(['all', 'dark'].includes(scope), 'ATLAS_TEST_SCOPE must be all or dark');
+const darkOnly = scope === 'dark';
 const playwrightModule = process.env.PLAYWRIGHT_MODULE || 'playwright';
 const {chromium} = await import(path.isAbsolute(playwrightModule) ? pathToFileURL(playwrightModule).href : playwrightModule);
 await mkdir(output, {recursive: true});
@@ -28,7 +32,7 @@ const browser = await chromium.launch({
   headless: true,
   args: process.env.ATLAS_SOFTWARE_GL === '1' ? ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] : [],
 });
-const context = await browser.newContext({viewport: {width: 1440, height: 1000}, reducedMotion: 'reduce'});
+const context = await browser.newContext({viewport: {width: 1440, height: 1000}, reducedMotion: 'reduce', colorScheme: 'light'});
 // Exercise the supported fallback used when clipboard access is unavailable on a private HTTP origin.
 await context.addInitScript(() => Object.defineProperty(navigator, 'clipboard', {configurable: true, get: () => undefined}));
 const page = await context.newPage();
@@ -36,7 +40,7 @@ page.setDefaultTimeout(30_000);
 page.setDefaultNavigationTimeout(60_000);
 const pageErrors = [];
 page.on('pageerror', error => pageErrors.push(error.message));
-const report = {browser: browser.version(), softwareGL: process.env.ATLAS_SOFTWARE_GL === '1', course: false, checks: [], screenshots: []};
+const report = {browser: browser.version(), softwareGL: process.env.ATLAS_SOFTWARE_GL === '1', scope, emulatedColorScheme: 'light', course: false, checks: [], screenshots: []};
 const record = check => { report.checks.push(check); console.log(`PASS ${check}`); };
 const params = () => new URLSearchParams(new URL(page.url()).hash.slice(1));
 const frame = () => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
@@ -49,14 +53,14 @@ const ready = async () => {
   await frame();
   assert.equal(await page.locator('.loading.error').count(), 0, 'The model must load without an error');
 };
-const screenshot = async (name, inspectSelection = false) => {
+const screenshot = async (name, inspectSelection = false, inspectNeutral = false) => {
   await frame();
   const png = await page.screenshot({path: path.join(output, `${name}.png`), timeout: 60_000});
   report.screenshots.push(`${name}.png`);
-  if (!inspectSelection) return;
+  if (!inspectSelection && !inspectNeutral && !darkOnly) return;
   // Read the rendered image, excluding UI, so a correct DOM count cannot hide a lost camera fit.
   // This checks the existing renderer's green selection tint without exposing a scene debug API.
-  const measurement = await page.evaluate(async encoded => {
+  const measurement = await page.evaluate(async ({encoded, inspectNeutral}) => {
     const image = new Image();
     image.src = `data:image/png;base64,${encoded}`;
     await image.decode();
@@ -66,21 +70,35 @@ const screenshot = async (name, inspectSelection = false) => {
     ctx.drawImage(image, 0, 0);
     const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
     const scale = canvas.width / innerWidth;
-    const excluded = [...document.querySelectorAll('.course-panel,.layers-panel,.detail-sheet,.top-actions,.mode-switch,.view-controls,.bottom-dock,.identity,.scene-caption,.studio-footer')].filter(element => getComputedStyle(element).visibility !== 'hidden' && getComputedStyle(element).display !== 'none').map(element => element.getBoundingClientRect()).filter(box => box.width && box.height);
+    // Include the existing focus rings outside control boxes; their mint color is UI, not anatomy.
+    const excluded = [...document.querySelectorAll('.course-panel,.layers-panel,.detail-sheet,.top-actions,.mode-switch,.view-controls,.bottom-dock,.identity,.scene-caption,.studio-footer')].filter(element => getComputedStyle(element).visibility !== 'hidden' && getComputedStyle(element).display !== 'none').map(element => element.getBoundingClientRect()).filter(box => box.width && box.height).map(box => ({left: box.left - 8, right: box.right + 8, top: box.top - 8, bottom: box.bottom + 8}));
     const points = [];
     let left = Infinity, right = -Infinity, top = Infinity, bottom = -Infinity;
+    const neutral = {pixels: 0, left: Infinity, right: -Infinity, top: Infinity, bottom: -Infinity};
     for (let y = 0; y < canvas.height; y++) for (let x = 0; x < canvas.width; x++) {
       const offset = (y * canvas.width + x) * 4, r = pixels[offset], g = pixels[offset + 1], b = pixels[offset + 2];
-      if (g <= r + 8 || b <= r + 3 || g < b - 5) continue;
       const cssX = x / scale, cssY = y / scale;
+      if (inspectNeutral && r > 70 && r >= g - 3 && g >= b + 4 && !excluded.some(box => cssX >= box.left && cssX <= box.right && cssY >= box.top && cssY <= box.bottom)) {
+        neutral.pixels++; neutral.left = Math.min(neutral.left, cssX); neutral.right = Math.max(neutral.right, cssX); neutral.top = Math.min(neutral.top, cssY); neutral.bottom = Math.max(neutral.bottom, cssY);
+      }
+      if (g <= r + 8 || b <= r + 3 || g < b - 5) continue;
       if (excluded.some(box => cssX >= box.left && cssX <= box.right && cssY >= box.top && cssY <= box.bottom)) continue;
       points.push({x: cssX, y: cssY});
       left = Math.min(left, cssX); right = Math.max(right, cssX); top = Math.min(top, cssY); bottom = Math.max(bottom, cssY);
     }
-    return {pixels: points.length, width: right - left, height: bottom - top, sample: points[Math.floor(points.length / 2)]};
-  }, png.toString('base64'));
-  assert.ok(measurement.pixels >= 80 && measurement.width >= 12 && measurement.height >= 12, `Focused anatomy must remain visibly framed after viewport changes: ${JSON.stringify(measurement)}`);
-  (report.renderedSelections ??= []).push({screenshot: `${name}.png`, ...measurement});
+    const cornerLuminance = [[2, 2], [canvas.width - 3, 2], [2, canvas.height - 3]].map(([x, y]) => {
+      const offset = (y * canvas.width + x) * 4;
+      const linear = [pixels[offset], pixels[offset + 1], pixels[offset + 2]].map(value => {const c = value / 255; return c <= .04045 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4;});
+      return .2126 * linear[0] + .7152 * linear[1] + .0722 * linear[2];
+    });
+    return {pixels: points.length, width: right - left, height: bottom - top, sample: points[Math.floor(points.length / 2)], ...(inspectNeutral ? {neutral: {pixels: neutral.pixels, width: neutral.right - neutral.left, height: neutral.bottom - neutral.top}} : {}), cornerLuminance};
+  }, {encoded: png.toString('base64'), inspectNeutral});
+  if (inspectSelection) {
+    assert.ok(measurement.pixels >= 80 && measurement.width >= 12 && measurement.height >= 12, `Focused anatomy must remain visibly framed after viewport changes: ${JSON.stringify(measurement)}`);
+    (report.renderedSelections ??= []).push({screenshot: `${name}.png`, ...measurement});
+  }
+  if (darkOnly) assert.ok(measurement.cornerLuminance.every(value => value < .1), `The rendered stage must remain dark: ${JSON.stringify(measurement.cornerLuminance)}`);
+  if (inspectNeutral) (report.renderedContext ??= []).push({screenshot: `${name}.png`, ...measurement});
   return measurement;
 };
 const hash = async values => {
@@ -100,7 +118,141 @@ const openSearch = async text => {
   await page.getByRole('option').first().waitFor();
 };
 
+const darkSurfaces = async (selector, target = page) => {
+  const values = await target.locator(selector).evaluateAll(elements => {
+    const canvas = document.createElement('canvas'); canvas.width = canvas.height = 1;
+    const ctx = canvas.getContext('2d');
+    const rgba = css => {ctx.clearRect(0, 0, 1, 1); ctx.fillStyle = css; ctx.fillRect(0, 0, 1, 1); const color = [...ctx.getImageData(0, 0, 1, 1).data]; color[3] /= 255; return color;};
+    const over = (front, back) => front.slice(0, 3).map((value, index) => value * front[3] + back[index] * (1 - front[3]));
+    const luminance = color => {const c = color.map(value => {const x = value / 255; return x <= .04045 ? x / 12.92 : ((x + .055) / 1.055) ** 2.4;}); return .2126 * c[0] + .7152 * c[1] + .0722 * c[2];};
+    return elements.filter(element => {
+      const style = getComputedStyle(element), box = element.getBoundingClientRect();
+      return style.display !== 'none' && style.visibility !== 'hidden' && box.width && box.height;
+    }).map(element => {
+      const ancestors = []; for (let node = element; node; node = node.parentElement) ancestors.unshift(node);
+      let background = [255, 255, 255];
+      for (const ancestor of ancestors) background = over(rgba(getComputedStyle(ancestor).backgroundColor), background);
+      const foreground = over(rgba(getComputedStyle(element).color), background), bg = luminance(background), fg = luminance(foreground);
+      return {tag: element.tagName, background, foreground, backgroundLuminance: bg, contrast: (Math.max(bg, fg) + .05) / (Math.min(bg, fg) + .05)};
+    });
+  });
+  assert.ok(values.length, `${selector} must expose a visible surface`);
+  for (const value of values) {
+    assert.ok(value.backgroundLuminance < .1, `${selector} must have a dark background: ${JSON.stringify(value)}`);
+    assert.ok(value.contrast >= 4.5, `${selector} must keep readable text contrast: ${JSON.stringify(value)}`);
+  }
+  (report.darkSurfaces ??= []).push({selector, count: values.length, minimumContrast: Math.min(...values.map(value => value.contrast))});
+};
+
+const darkFirstPaint = async () => {
+  const initial = await browser.newContext({viewport: {width: 900, height: 640}, javaScriptEnabled: false, colorScheme: 'light'});
+  try {
+    const initialPage = await initial.newPage();
+    // A delayed bundle or stylesheet must not expose a white initial canvas.
+    await initialPage.route('**/*', route => ['script', 'stylesheet'].includes(route.request().resourceType()) ? route.abort() : route.continue());
+    await initialPage.goto(base, {waitUntil: 'domcontentloaded'});
+    const initialStyle = await initialPage.evaluate(() => ({lightPreference: matchMedia('(prefers-color-scheme: light)').matches, colorScheme: getComputedStyle(document.documentElement).colorScheme}));
+    assert.ok(initialStyle.lightPreference && initialStyle.colorScheme.includes('dark'), 'The initial document must request dark browser controls independently of the OS preference');
+    await darkSurfaces('html,body', initialPage);
+    await initialPage.screenshot({path: path.join(output, 'dark-first-paint.png')});
+    report.screenshots.push('dark-first-paint.png');
+    report.firstPaint = {...initialStyle, scriptsAndStylesheetsBlocked: true};
+    record('The first HTML paint is dark with OS light preference and external scripts/stylesheets blocked');
+  } finally {await initial.close();}
+};
+
+const darkChecks = async (course, atlas) => {
+  await darkSurfaces('html,body');
+  if (course) {
+    report.course = true; report.selectionCount = course.selections.length; report.objectiveCount = course.unmappedObjectives.length;
+    const first = course.selections[0], term = course.concepts.find(item => item.id === first.conceptIds[0]);
+    await state('data-mode', 'course');
+    await state('data-selected-count', first.elements.length);
+    await darkSurfaces('.mode-switch,.course-panel,.course-detail,.course-dock');
+    await darkSurfaces('.course-term-name strong,.course-term-name [lang],.course-side,.course-order,.course-evidence');
+    await page.locator('.course-sources').scrollIntoViewIfNeeded();
+    await darkSurfaces('.source-heading,.course-source-actions a');
+    const source = page.locator('.course-source-actions a').first();
+    await source.hover(); await darkSurfaces('.course-source-actions a');
+    await source.focus(); await source.press('Tab');
+    assert.ok(await page.evaluate(() => {const element = document.activeElement, style = getComputedStyle(element); return element.matches('.course-source-actions a') && style.outlineStyle !== 'none' && parseFloat(style.outlineWidth) > 0;}), 'Source links must retain a visible keyboard focus indicator');
+    await screenshot('dark-source-controls');
+    const copy = page.getByRole('button', {name: 'Kopiraj povezavo do trenutnega izbora', exact: true});
+    await copy.click(); await page.locator('.copy-fallback input').waitFor();
+    assert.equal(await page.locator('.copy-fallback input').inputValue(), page.url());
+    await darkSurfaces('.copy-fallback,.copy-fallback input');
+    await screenshot('dark-clipboard');
+    await page.locator('.copy-fallback input').press('Escape');
+    await page.locator('.copy-fallback').waitFor({state: 'hidden'});
+    record('UNI surfaces, source links, keyboard focus, and clipboard fallback remain dark and readable');
+
+    await openSearch(term.labels.sl);
+    await darkSurfaces('.search-panel,.anatomy-search-results,.anatomy-search-results [data-slot=combobox-item]');
+    assert.equal(await page.locator('.anatomy-search-results').evaluate(element => !!element.closest('main')), false, 'Search popup coverage must include its portalled surface');
+    await screenshot('dark-search-portal');
+    await page.getByRole('option').first().click();
+    await state('data-selected-count', term.elements.length);
+    await page.getByRole('button', {name: 'About this atlas', exact: true}).click();
+    await page.locator('.about-sheet').waitFor();
+    await darkSurfaces('.about-sheet,.about-copy,.about-sheet [data-slot=sheet-description]');
+    await screenshot('dark-about-portal');
+    await page.locator('.about-sheet [data-slot=sheet-close]').click();
+    await page.locator('.about-sheet').waitFor({state: 'hidden'});
+    record('Portalled search results and About content inherit the default dark theme');
+
+    await hash({course: course.courseId, selection: first.id});
+    await state('data-selected-count', first.elements.length);
+    for (const [width, height] of [[1440, 1000], [1024, 768], [768, 820], [390, 844], [320, 568], [844, 390]]) {
+      await page.setViewportSize({width, height});
+      await insideViewport('.course-detail');
+      await darkSurfaces('.course-detail,.course-dock');
+      assert.ok(await page.locator('.course-detail .detail-scroll').evaluate(element => element.clientHeight >= 40), 'The study list must retain a usable scroll region');
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, 'Dark study controls must not create horizontal overflow');
+      await screenshot(`dark-course-${width}x${height}`, true);
+    }
+    record('Dark course framing survives desktop, split pane, portrait, 320px, and landscape resizing');
+
+    await page.setViewportSize({width: 1440, height: 1000});
+    const objective = course.unmappedObjectives[0];
+    if (objective) {
+      const surrounding = course.selections.find(selection => selection.id === objective.contextSelectionId);
+      await hash({course: course.courseId, selection: surrounding.id});
+      await state('data-selected-count', surrounding.elements.length);
+      const highlighted = await screenshot('dark-highlighted-context-selection', true);
+      await hash({course: course.courseId, objective: objective.id, context: '1'});
+      await state('data-selected-count', 0); await state('data-context-count', surrounding.elements.length);
+      await darkSurfaces('.unmapped-notice,.context-explanation,.context-action');
+      const neutral = await screenshot('dark-neutral-context', false, true);
+      assert.ok(neutral.neutral.pixels >= 80 && neutral.neutral.width >= 12 && neutral.neutral.height >= 12, `Neutral surrounding geometry must remain visible: ${JSON.stringify(neutral)}`);
+      assert.ok(neutral.pixels <= Math.max(80, highlighted.pixels * .04), `Unmapped context must not acquire the selection tint: ${JSON.stringify({selectedPixels: highlighted.pixels, contextPixels: neutral.pixels})}`);
+      record('Selected meshes retain their highlight while unmapped context shows visible neutral geometry without the selection tint');
+    }
+  }
+  await hash({explorer: '1'}); await state('data-mode', 'explorer'); await state('data-selected-count', 0);
+  await darkSurfaces('.layers-panel,.bottom-dock,.view-controls');
+  const slider = page.getByRole('slider');
+  await slider.focus(); await slider.press('ArrowRight');
+  assert.ok(await page.locator('.explode-control [data-slot=slider-thumb]').evaluate(element => {
+    const input = element.querySelector('input'), style = getComputedStyle(element);
+    return input === document.activeElement && input.matches(':focus-visible') && style.outlineStyle !== 'none' && parseFloat(style.outlineWidth) >= 2;
+  }), 'Keyboard focus on the range input must outline its visible slider thumb');
+  await slider.press('Home');
+  assert.equal(await slider.inputValue(), '0');
+  record('The explorer slider exposes a visible thumb outline during keyboard interaction');
+  await screenshot('dark-full-explorer');
+  const bone = atlas.concepts.find(concept => concept.name.toLowerCase() === 'femur');
+  await openSearch(bone.name);
+  await darkSurfaces('.search-panel,.anatomy-search-results');
+  await page.getByRole('option').first().click(); await state('data-selected-count', bone.elements.length);
+  await darkSurfaces('.detail-sheet,.structure-description,.structure-meta');
+  await page.getByRole('button', {name: 'Isolate structure', exact: true}).click();
+  await page.getByRole('button', {name: 'Show surrounding anatomy', exact: true}).waitFor();
+  await screenshot('dark-explorer-isolated', true);
+  record('The full explorer, its controls, and isolated geometry remain usable on the dark 3D stage');
+};
+
 try {
+  if (darkOnly) await darkFirstPaint();
   await page.goto(base, {waitUntil: 'domcontentloaded'});
   await ready();
   const atlas = await (await page.request.get(new URL('/models/atlas.json', base).href)).json();
@@ -110,6 +262,8 @@ try {
   const course = runtime?.course;
   record('The existing catalogue and WebGL renderer load');
 
+  if (darkOnly) await darkChecks(course, atlas);
+  else {
   if (course) {
     report.course = true;
     report.selectionCount = course.selections.length;
@@ -335,6 +489,7 @@ try {
   await state('data-selected-count', 0);
   await screenshot('preserved-explorer');
   record('Full explorer search, isolation, skeleton preset, exploded inventory, and reset remain functional');
+  }
   assert.deepEqual(pageErrors, [], 'Browser runtime must not throw uncaught errors');
   record('No uncaught page errors');
   await writeFile(path.join(output, 'report.json'), `${JSON.stringify(report, null, 2)}\n`);
