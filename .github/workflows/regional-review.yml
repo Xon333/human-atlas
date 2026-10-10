@@ -2,9 +2,9 @@ name: Regional review validation
 on:
   push:
     branches: [codex/uni-regional-review-2026-10-10]
-    paths: [.review/READY]
+    paths: ['app/**', 'scripts/**', 'server/**', 'web/**', 'package*.json', '.github/workflows/regional-review.yml']
 permissions:
-  contents: write
+  contents: read
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -12,35 +12,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Materialize exact reviewed files
-        run: |
-          python3 - <<'PY'
-          import base64, hashlib, json, pathlib, zlib
-          data=zlib.decompress(base64.b64decode(''.join(pathlib.Path(f'.review/edits-{i}.b64').read_text().strip() for i in range(4))))
-          assert hashlib.sha256(data).hexdigest()=='6a72ee8efbe286057acc6ffe5f92b7e9d3c70470e09e29e4226947843c390c14'
-          edits=json.loads(data)
-          for name,item in edits.items():
-              p=pathlib.Path(name)
-              assert not p.is_absolute() and '..' not in p.parts
-              assert p.parts[0] in ('app','scripts','web') or name=='package.json'
-              old=p.read_text() if p.exists() else ''
-              assert hashlib.sha256(old.encode()).hexdigest()==item['old'],name+' changed'
-              for start,end,text in reversed(item['ops']):
-                  old=old[:start]+text+old[end:]
-              assert hashlib.sha256(old.encode()).hexdigest()==item['new'],name+' output mismatch'
-              p.parent.mkdir(parents=True,exist_ok=True)
-              p.write_text(old)
-          pathlib.Path('/tmp/review-paths').write_text('\n'.join(edits))
-          PY
-      - run: npm ci && npm run check && npm run test:course && npm run test:runtime && npm run build
-      - name: Save tested changes on isolated review branch
-        run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          while IFS= read -r file || test -n "$file"; do git add -- "$file"; done < /tmp/review-paths
-          git commit -m 'Implement regional study using existing contextual highlighting'
-          git push origin HEAD:codex/uni-regional-review-2026-10-10
+          cache: npm
+      - run: npm ci
+      - run: npm run check && npm run test:course && npm run test:runtime && npm run build
+      - name: Archive this public source revision for independent review
+        if: always()
+        run: git archive --format=tar --prefix=atlas/ HEAD > /tmp/atlas-review-source.tar
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: regional-review-source
+          path: /tmp/atlas-review-source.tar
+          retention-days: 1
+          if-no-files-found: error
