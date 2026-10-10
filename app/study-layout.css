@@ -73,6 +73,24 @@
  .course-mode .course-panel.mobile-open{top:auto;bottom:calc(83px + env(safe-area-inset-bottom));left:12px;right:12px;width:auto;max-height:calc(100dvh - 205px);padding:12px 12px 0}
  .course-mode:has(.course-detail) .scene-caption{display:none}
 }
+@media(max-width:767px) and (max-height:600px) and (orientation:portrait){
+ /* One top row leaves room for the anatomy on short phones. Credits remain in About. */
+ body:has(.course-detail) .course-mode .identity{display:none}
+ body:has(.course-detail) .course-mode .mode-switch{top:max(8px,env(safe-area-inset-top));left:12px}
+ body:has(.course-detail) .course-mode .mode-switch button{min-height:44px}
+ body:has(.course-detail) .course-mode .top-actions{top:max(8px,env(safe-area-inset-top))}
+ .course-mode .studio-footer{display:none}
+ .course-mode .course-dock.bottom-dock{bottom:calc(8px + env(safe-area-inset-bottom))}
+ .course-mode .course-dock .dock-current{min-height:44px;height:44px;padding-block:3px}
+ .course-mode .dock-current>span{-webkit-line-clamp:1}
+ .course-mode .course-dock .icon-button{min-width:44px;width:44px;min-height:44px}
+ .detail-sheet.course-detail,.detail-sheet.course-detail.is-isolated{bottom:calc(70px + env(safe-area-inset-bottom))!important;max-height:max(216px,39dvh)!important;padding:8px!important;gap:4px!important}
+ .course-detail .detail-header>.structure-title{display:flex;align-items:center;min-height:44px;padding-right:40px}
+ .course-detail .region-sides button,.course-detail .region-layer select{min-height:44px}
+ .course-detail .region-selection:not(.source-side-conflict){display:none}
+ .course-detail .detail-scroll{min-height:40px}
+ .course-detail .region-actions>button,.course-detail .scene-link-control>button{min-height:44px}
+}
 @media(max-height:600px) and (orientation:landscape){
  .course-mode .identity{left:14px;top:15px}
  .course-mode .mode-switch{left:14px;top:74px}
@@ -80,4 +98,5 @@
  .course-mode .course-dock.bottom-dock{left:12px;right:314px;width:auto;min-width:0;transform:none;bottom:12px}
  .course-mode .course-panel.mobile-open{top:12px;bottom:12px;width:260px;max-height:none}
  .course-mode .scene-caption{display:none}
+ .course-detail .region-sides button,.course-detail .region-layer select,.course-detail .region-actions>button,.course-detail .scene-link-control>button,.course-detail .course-terms button{min-height:44px}
 }

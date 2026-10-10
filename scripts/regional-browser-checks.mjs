@@ -1,6 +1,6 @@
-// Uses the existing browser, renderer, screenshot assertions and runtime fixture.
+// Uses the existing browser, renderer, screenshot assertions and real private export.
 import assert from 'node:assert/strict';
-import {resolveAtlasLink} from '../app/course-navigation.ts';
+import {parseAtlasLink,resolveAtlasLink} from '../app/course-navigation.ts';
 
 export async function regionalChecks({page,course,atlas,runtime,base,state,hash,ready,screenshot,record,insideViewport,openSearch,report}) {
  assert.ok(course?.selections.every(s=>s.region),'Regional checks require the real regional export');
@@ -8,8 +8,8 @@ export async function regionalChecks({page,course,atlas,runtime,base,state,hash,
  const selectionLink=s=>({mode:'course',courseId:course.courseId,selectionId:s.id});
  const expected=s=>resolveAtlasLink(selectionLink(s),atlas,course).scopeElements;
  const selected=()=>page.locator('.course-terms [aria-pressed="true"]');
- const region=s=>page.locator('.course-selection-list button').filter({hasText:s.label}).first();
- const choose=async s=>{await region(s).click();await state('data-scope-count',expected(s).length);await state('data-selected-count',0);await state('data-isolate',false);};
+ const region=s=>page.locator('.course-selection-list button').filter({hasText:s.region?.label??s.label}).first();
+ const choose=async s=>{await region(s).click();const current=parseAtlasLink(new URL(page.url()).hash);assert.equal(current.selectionId,s.id);await state('data-scope-count',resolveAtlasLink(current,atlas,course).scopeElements.length);await state('data-selected-count',0);await state('data-isolate',false);};
  const first=course.selections[0];
  await state('data-mode','course');
  const hrefs=new Set();
@@ -19,6 +19,13 @@ export async function regionalChecks({page,course,atlas,runtime,base,state,hash,
   const displayed=await page.locator('.course-terms button').count();
   assert.ok(displayed>0);
   assert.equal(await selected().count(),0,'Opening a region must not tint every bone');
+  for (const id of s.conceptIds) {
+   const term=course.concepts.find(item=>item.id===id);
+   if (!term.elements.some(mesh=>expected(s).includes(mesh))) continue;
+   const row=page.locator('.course-terms button[data-course-term="true"]').filter({hasText:term.labels.sl}).filter({hasText:term.labels.la});
+   assert.equal(await row.count(),1,'Each visible teaching term retains its source labels and authored order');
+   assert.ok((await row.getAttribute('title')).includes(term.name),'The English catalogue name remains available');
+  }
   for(const href of await page.locator('.course-sources a').evaluateAll(a=>a.map(x=>x.getAttribute('href')))){
    if(href.startsWith('/api/course/sources/'))hrefs.add(href.split('#')[0]);
   }
@@ -75,6 +82,7 @@ export async function regionalChecks({page,course,atlas,runtime,base,state,hash,
  assert.equal(page.url(),saved);await state('data-selected-count',1);await state('data-isolate',false);
  assert.equal(await page.getByLabel('Plasti predela').inputValue(),'muscles');
  await choose(first);
+ assert.equal(await page.getByLabel('Plasti predela').inputValue(),'muscles','Returning to the active region must preserve its chosen layer');
  await page.goBack();await state('data-selected-count',1);await state('data-isolate',false);
  await page.goForward();await state('data-selected-count',0);
  record('Side/layer filters, a muscle selection, reload and browser history retain regional context');
@@ -90,6 +98,48 @@ export async function regionalChecks({page,course,atlas,runtime,base,state,hash,
  await page.locator('.copy-fallback input').press('Escape');
  assert.ok(await page.locator('.course-detail').isVisible());
  record('Trilingual search reuses the same target and clipboard fallback keeps the list open');
+
+ // Existing note links predate selection/region parameters. They must acquire
+ // their authored region without changing the taught target or isolating it.
+ for(const target of [{structure:firstTerm.id},{mesh:firstTerm.elements[0]}]){
+  await hash({course:course.courseId,...target});
+  const link=resolveAtlasLink({mode:'course',courseId:course.courseId,...(target.structure?{structureId:target.structure}:{meshId:target.mesh})},atlas,course);
+  await state('data-mode','course');await state('data-scope-count',link.scopeElements.length);
+  await state('data-selected-count',link.elements.length);await state('data-isolate',false);
+  assert.ok(await page.locator('.course-terms button').count()>link.elements.length);
+  await page.reload({waitUntil:'domcontentloaded'});await ready();
+  await state('data-scope-count',link.scopeElements.length);await state('data-isolate',false);
+ }
+ await choose(first);
+ const historyLength=await page.evaluate(()=>history.length);
+ await choose(first);
+ assert.equal(await page.evaluate(()=>history.length),historyLength,'Choosing the active region must not duplicate browser history');
+ for(const view of ['front','back','side']){
+  await page.getByRole('button',{name:`${view} view`,exact:true}).click();
+  assert.equal(new URLSearchParams(new URL(page.url()).hash.slice(1)).get('view'),view);
+  assert.equal(await page.getByRole('button',{name:`${view} view`,exact:true}).getAttribute('aria-pressed'),'true');
+ }
+ await page.getByRole('button',{name:'front view',exact:true}).click();
+ record('Existing direct structure/mesh links retain whole regions; camera controls and duplicate-free history remain usable');
+
+ const beforeRotation=await page.evaluate(()=>window.__atlasResourceProbe.frames);
+ await page.getByRole('button',{name:'Rotate body',exact:true}).click();
+ await page.waitForFunction(before=>window.__atlasResourceProbe.frames>=before+3,beforeRotation,{polling:100,timeout:30_000});
+ await page.getByRole('button',{name:'Pause rotation',exact:true}).click();
+ await page.waitForFunction(()=>window.__atlasResourceProbe.pending.size===0,null,{polling:100,timeout:30_000});
+ record('The regional rotation control animates the whole region and stops when paused');
+
+ await hash({course:course.courseId,selection:first.id,mesh:'FJ1469'});
+ await state('data-mode','course');await state('data-selected-count',1);await state('data-isolate',false);
+ assert.equal(await page.getByRole('group',{name:'Stran telesa'}).getByRole('button',{name:'Obe',exact:true}).getAttribute('aria-pressed'),'true');
+ await page.getByText('Neskladna oznaka strani v viru',{exact:true}).waitFor();
+ const conflicting=atlas.parts.find(p=>p.id==='FJ1469M');
+ await openSearch(conflicting.name);
+ await page.getByRole('option').filter({hasText:conflicting.name}).first().click();
+ await state('data-selected-count',1);
+ assert.equal(await page.getByRole('group',{name:'Stran telesa'}).getByRole('button',{name:'Obe',exact:true}).getAttribute('aria-pressed'),'true');
+ await page.getByText('Neskladna oznaka strani v viru',{exact:true}).waitFor();
+ record('Conflicting source-side labels retain exact target access with both sides and an explicit source warning');
 
  // A useful default frame must fit complete regions, not merely the seed meshes.
  for(const s of course.selections.slice(1)){
@@ -133,7 +183,6 @@ export async function regionalChecks({page,course,atlas,runtime,base,state,hash,
  for(const href of hrefs){
   const response=await page.request.head(new URL(href,base).href);assert.equal(response.status(),200);assert.match(response.headers()['cache-control'],/no-store/);
  }
- const binding=course.noteBindings[Object.keys(course.noteBindings)[0]];
  const source=await page.request.get(new URL(`/api/course/sources/${encodeURIComponent(Object.keys(course.noteBindings)[0])}/pdf`,base).href,{headers:{Range:'bytes=0-4'}});
  assert.equal(source.status(),206);assert.equal((await source.body()).toString(),'%PDF-','Tests use an actual PDF, not synthetic media');
  report.sourceCount=hrefs.size;

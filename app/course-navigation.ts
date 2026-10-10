@@ -1,7 +1,7 @@
 import type { Atlas, View } from './anatomy';
 import type { CourseOverlay } from './course';
 import { encodeCourseText, spaceoRoute, validateSpaceOPath } from './course.ts';
-import {regionElements, partSide, type StudySide, type StudyLayer} from './study-region.ts';
+import {regionElements, partSide, hasSourceSideConflict, type StudySide, type StudyLayer} from './study-region.ts';
 
 export interface AtlasLink {
   mode: 'course' | 'explorer';
@@ -95,7 +95,7 @@ export function resolveAtlasLink(link: AtlasLink, atlas: Atlas, course: CourseOv
   if (link.meshId) requireLink(part, `Unknown atlas mesh ${link.meshId}`);
   if (link.structureId) requireLink(concept, `Unknown atlas structure ${link.structureId}`);
   if (part && concept) requireLink(concept.elements.includes(part.id), 'This mesh does not belong to the linked structure');
-  const selection = link.selectionId ? course?.selections.find(item => item.id === link.selectionId) : undefined;
+  let selection = link.selectionId ? course?.selections.find(item => item.id === link.selectionId) : undefined;
   let scopeElements: string[] | undefined;
   let side = link.side, layer = link.layer;
   if (link.mode === 'course') {
@@ -109,14 +109,24 @@ export function resolveAtlasLink(link: AtlasLink, atlas: Atlas, course: CourseOv
       const contextIds = context.region ? regionElements(atlas, context.region.elements, side ?? context.region.defaultSide, layer ?? context.region.defaultLayer) : context.elements;
       return {...link, elements: [], ...(link.context ? {contextElements: [...contextIds]} : {})};
     }
+    if (!selection && (concept || part)) {
+      // Existing note links name a taught target without a selection. Reuse its
+      // authored region so old links gain the same context as a list/canvas pick.
+      // Region membership alone must not authorize an unrelated legacy target.
+      const term = course.concepts.find(item => concept ? item.id === concept.id : item.elements.includes(part!.id));
+      requireLink(term, 'This structure is outside the prepared course overlay');
+      selection = course.selections.find(item => item.conceptIds.includes(term.id));
+    }
     if (selection) {
       const region = selection.region;
       const allowed = region?.elements ?? selection.elements;
       if (concept && !part) requireLink(concept.elements.every(id => allowed.includes(id)), 'This structure does not belong to the linked selection');
       if (part) requireLink(allowed.includes(part.id), 'This mesh does not belong to the linked selection');
       const targetIds = part ? [part.id] : concept?.elements ?? [];
+      const conflictingSide = !!region && hasSourceSideConflict(targetIds);
+      requireLink(!conflictingSide || side === undefined || side === 'both', 'The source side label conflicts with the mesh position; choose both sides to view this structure.');
       const targetSides = new Set(atlas.parts.filter(item => targetIds.includes(item.id)).map(partSide).filter(Boolean));
-      side = side ?? (targetSides.size === 1 ? [...targetSides][0] ?? undefined : undefined) ?? region?.defaultSide;
+      side = side ?? (conflictingSide ? 'both' : targetSides.size === 1 ? [...targetSides][0] ?? undefined : undefined) ?? region?.defaultSide;
       layer = layer ?? region?.defaultLayer;
       scopeElements = region ? regionElements(atlas, allowed, side ?? 'both', layer ?? 'all') : [...allowed];
       if ((part && !scopeElements.includes(part.id)) || (concept && !concept.elements.some(id => scopeElements!.includes(id)))) {
@@ -129,15 +139,12 @@ export function resolveAtlasLink(link: AtlasLink, atlas: Atlas, course: CourseOv
       if (part) requireLink(scopeElements.includes(part.id), 'This mesh is outside the selected side');
       if (concept) requireLink(concept.elements.some(id => scopeElements!.includes(id)), 'This structure is outside the selected side');
       elements = [...selection.elements];
-    } else if (concept || part) {
-      // Old course links without a region remain limited to their authored course terms.
-      requireLink(course.concepts.some(item => concept ? item.id === concept.id : item.elements.includes(part!.id)), 'This structure is outside the prepared course overlay');
     }
   }
   if (concept) elements = [...concept.elements];
   if (part) elements = [part.id];
   if (scopeElements && (concept || part)) elements = elements.filter(id => scopeElements!.includes(id));
-  return {...link, ...(side ? {side} : {}), ...(layer ? {layer} : {}), elements, ...(scopeElements ? {scopeElements} : {})};
+  return {...link, ...(selection && link.mode === 'course' ? {selectionId: selection.id} : {}), ...(side ? {side} : {}), ...(layer ? {layer} : {}), elements, ...(scopeElements ? {scopeElements} : {})};
 }
 
 /** `file` includes the exact heading before URI encoding; the path is relative to the observed vault root. */

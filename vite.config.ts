@@ -4,4 +4,4 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/postcss';
 import {privateBuildGuard} from './scripts/private-build-guard.mjs';
 const path=(relative:string)=>fileURLToPath(new URL(relative,import.meta.url));
-export default defineConfig({root:path('./web'),publicDir:path('./public'),plugins:[privateBuildGuard(),react()],resolve:{alias:{'@':path('./')}},css:{postcss:{plugins:[tailwindcss()]}},server:{watch:{usePolling:true}},build:{outDir:path('./dist'),emptyOutDir:true}});
+export default defineConfig({root:path('./web'),publicDir:path('./public'),plugins:[privateBuildGuard(),react()],resolve:{alias:{'@':path('./')}},css:{postcss:{plugins:[tailwindcss()]}},build:{outDir:path('./dist'),emptyOutDir:true}});

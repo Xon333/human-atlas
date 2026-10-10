@@ -1,51 +1,39 @@
-# UNI Atlas — cloud finish and native handoff
+# Consolidated Atlas integration
 
-Continue [PR #1](https://github.com/Xon333/human-atlas/pull/1) on `codex/uni-study-mode-2026-10-10`; fetch the latest head and preserve later changes. Do not restart from main or open a competing implementation. [SpaceO's continuation](https://github.com/Xon333/SpaceO/blob/codex/uni-course-integration-2026-10-10/.spaceo/uni/CONTINUE.md) owns cross-repository coordination and the private acceptance record. This file owns remaining Atlas work; [course-runtime.md](course-runtime.md) owns configuration and route syntax.
+[PR #1](https://github.com/Xon333/human-atlas/pull/1) is the integration candidate for the regional study UI and the reviewed [resource PR #2](https://github.com/Xon333/human-atlas/pull/2). Both histories are preserved. The resource change no longer has a separate deployment or native tracker.
 
-## Cloud finish
+## One native execution
 
-**Complete in [code commit `b5d88acd`](https://github.com/Xon333/human-atlas/commit/b5d88acd1ad0585c6ebfb0404604efb0370c38ba).** The existing UNI mode and full explorer now use a near-black/charcoal interface and 3D stage from the first HTML paint, including browser controls, portalled search/About surfaces, mobile sheets and the clipboard fallback. Source links and the explode slider have visible keyboard focus; target selection and amber source/context cues remain distinct.
+**Start and finish in [SpaceO's existing UNI continuation](https://github.com/Xon333/SpaceO/blob/codex/uni-course-integration-2026-10-10/.spaceo/uni/CONTINUE.md).** It contains the reviewed revision pair, exact OMV preparation/deployment and rollback instructions, one Mac acceptance pass, and the original accepted native evidence. An OMV integration owner may use a Mac child for actual Obsidian/device work. Keep both PRs draft/unmerged and the existing sync hold paused.
 
-This extends the existing implementation. The renderer changes only its clear colour, ground, platform, rings and inventory-marker styling. Anatomy system colours, lighting, the selection shader, source-image pixels, catalogue/model assets, GPU batching, picking, camera/explosion behaviour and course/runtime logic are unchanged. No theme framework, new dependencies, duplicate viewer or copied teaching material were added.
+The accepted private deployment, course notes, source returns, H5P playback, PDF++ capture and editable drawing already exist. Their dated acceptance remains in that continuation. Native execution applies the consolidated candidate and verifies changed behavior in the actual environment; it does not repeat initial installation, content adoption, source research or cloud tests.
 
-Fresh verification of that code:
+## Cloud implementation
 
-- `npm run check`, `npm run build`, 58 course checks, 15 runtime/privacy tests, and the existing atlas and interaction validators passed. The production build retains the existing chunk-size advisory.
-- The focused [browser checker](../scripts/validate-browser.mjs), run with `ATLAS_TEST_SCOPE=dark` and a required private test overlay, passed on Chromium 153.0.8010.0 with WebGL2/SwiftShader. It tested dark first paint with OS light preference and external scripts/stylesheets blocked; UNI/explorer, source controls, search/About portals, clipboard fallback and keyboard focus; and 1440×1000, 1024×768, 768×820, 390×844, 320×568 and 844×390 resizing. No uncaught page errors occurred.
-- Screenshot inspection and pixel checks confirmed visible selected geometry at every size and neutral surrounding geometry with **zero selection-tint pixels**. The original tint predicate and minimum geometry thresholds are unchanged; UI focus outlines are excluded from geometry measurements. The lowest sampled UI/source text contrast was 6.36:1.
+- Regions open as neutral, coherent anatomy using the existing detailed model, materials and picker. Choosing a list item or mesh highlights it in place, retains the regional list and camera, and keeps isolation an explicit action.
+- Optional regional context extends the existing course schema. Original teaching targets, terminology, source bindings and unmapped objectives retain their meaning. Extra catalogue structures are identified as source names without claiming they are teaching requirements.
+- Deep links, side/layer filters, multilingual search, clipboard fallback, browser history, narrow panes and the complete explorer share the original scene and navigation.
+- Rendering and picking share geometry arrays. Idle/hidden views stop animation work, hidden batches are skipped, and a nonblocking WebGL2 fence limits queued GPU frames. Visible elapsed time controls transitions without accumulating hidden time. Context loss/unmount clean up pending work and owned resources.
 
-Private screenshots, reports and fixtures remain ignored local test output. The original full integration/browser evidence is retained in PR #1; this run adds scoped dark-mode evidence. Cloud software rendering and the existing media stand-ins do not establish Safari, Obsidian, real-phone or real-source acceptance.
+The timeout investigation and measured resource changes are recorded in [RESOURCE-CONSUMPTION.md](RESOURCE-CONSUMPTION.md). Configuration, schema and URL syntax remain in [course-runtime.md](course-runtime.md).
 
-**Only the deployment and device steps below remain.** Use the completed dark-mode commit or a descendant with the same application code for final acceptance; do not repeat cloud implementation, research or architecture. Keep subsequent source fixes with the cloud owner.
+## Reproducible verification
 
-## OMV deployment
-
-Use the existing service manager and private access path. Inspect actual checkout/container paths, Node version, service identity, origin, bind and port. Build the current PR candidate in an isolated checkout with Node 22.13+ and matching dependencies (`npm ci` when needed), retaining the working deployment until candidate checks pass. Do not remove its rollback revision or unrelated service configuration.
-
-From the complete, persistent SpaceO PR #6 checkout, export once against the candidate's actual catalogue:
+Use Node 22.13+ and the existing lockfile. Reuse matching dependencies and installed Playwright/Chromium. `PLAYWRIGHT_MODULE` and `CHROMIUM_EXECUTABLE` can point to those tools; no browser dependency is added to the application.
 
 ```sh
-python3 .spaceo/atlas-course/export.py --catalog '/observed/atlas-checkout/public/models/atlas.json'
+npm run check
+npm run test:course
+npm run test:runtime
+npm run test:geometry
+npm run test:scene
+node scripts/validate-atlas.mjs
+node scripts/validate-interactions.mjs
+npm run build
+ATLAS_TEST_SCOPE=all ATLAS_TEST_REQUIRE_COURSE=1 npm run test:browser
+ATLAS_TEST_SCOPE=resource npm run test:browser
 ```
 
-The path is a placeholder to resolve locally. Export already validates before replacing its output; `--check` is only the read-only alternative. Use the real lecture PDF, figures and captures, never the cloud media stand-ins.
+The `all` scope uses the real private regional export configured through `ATLAS_COURSE_FILE` and `ATLAS_SPACEO_ROOT`; it covers regional interactions, dark UI/source controls, responsive geometry and the original complete explorer sequence. `resource` adds deterministic idle, suspension, direct animated Reset, picking and context-loss regressions. `ATLAS_SOFTWARE_GL=1` enables the cloud software renderer only. Screenshots wait for the actual demand renderer to settle and retain a 60-second capture deadline.
 
-Run the built app with `npm run serve:private` under that service manager. Set the observed process environment from [runtime configuration](course-runtime.md#run-the-existing-app-privately), particularly `ATLAS_COURSE_FILE`, `ATLAS_SPACEO_ROOT`, `ATLAS_VAULT_NAME` and the origin/bind/port. These must be paths visible and readable to the actual process/container. A static-only deployment does not serve course APIs. Keep the source checkout available after deployment.
-
-Verify `/api/course` through both the worker-reachable runtime and user-facing private origin. Confirm the real bound PDF, figure and capture routes, PDF byte ranges and denial of an unregistered source. In particular, inspect the real skeleton PDF and pelvic-ligament figure omitted from the cloud media transfer. Preserve the private boundary; do not expose the whole vault or disable guards to fix routing.
-
-Print links from the running candidate:
-
-```sh
-npm run course:links -- --origin '<user-facing-private-origin>' --api '<worker-reachable-runtime-origin>'
-```
-
-Use the app's link button for individual structures/meshes. The printer constructs selection/objective URLs; it does not validate the supplied user-facing origin. The SpaceO owner places and tests links in the existing notes. No live paths, hostnames, course captures or private output belong in this public PR.
-
-## Device acceptance and closeout
-
-After SpaceO's reviewed content is present in the accepted Mac vault, test Safari and desktop Obsidian Web viewer: one selection, one sided mesh, one unmapped objective with neutral context, orbit/zoom/tap, pane resize, reload/Back, readable dark UI/stage, exact note heading, real PDF page and figure. Use a real phone for phone claims when available; missing device access is a recorded limit, not a desktop failure.
-
-Native workers own observed deployment/settings fixes. For a reproducible application bug, return the smallest evidence to the cloud source owner; do not redesign around it or repeat unrelated research. Rerun affected checks after fixes. Record private integration results once in SpaceO's continuation and only a non-sensitive deployment/device summary here. Preserve local work, SpaceO's sync hold and both unmerged main branches.
-
-Cloud implementation and scoped verification are complete at the commit above. OMV deployment, actual user-facing URLs, real teaching sources and Mac/Obsidian/device acceptance remain pending; record those observed results through the existing SpaceO coordination path.
+The private SpaceO workflow validates both repositories together, including its exporter/consumer and helper DOM tests. It retains browser evidence privately. The public workflow contains no private course snapshots, teaching assets or deployment configuration. Cloud browser results do not assert native Safari, Obsidian, device FPS, energy or total process memory.

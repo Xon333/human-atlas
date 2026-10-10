@@ -1,8 +1,10 @@
 // Optional real-browser regression check. Course expectations come from the private
 // runtime response; this file contains no copied course data or teaching assets.
 // ATLAS_TEST_SCOPE=dark runs only the theme, source-control, and responsive-rendering checks.
+// ATLAS_TEST_SCOPE=resource checks on-demand rendering; ATLAS_RESOURCE_BASELINE=1 only records its older baseline.
 import assert from 'node:assert/strict';
 import {regionalChecks} from './regional-browser-checks.mjs';
+import {resolveAtlasLink} from '../app/course-navigation.ts';
 import {once} from 'node:events';
 import {mkdir, writeFile} from 'node:fs/promises';
 import path from 'node:path';
@@ -12,8 +14,10 @@ import {createPrivateServer, runtimeConfig} from '../server/private-runtime.mjs'
 const root = fileURLToPath(new URL('../', import.meta.url));
 const output = path.resolve(process.env.ATLAS_TEST_OUTPUT || path.join(root, '.private-course/browser-checks'));
 const scope = process.env.ATLAS_TEST_SCOPE || 'all';
-assert.ok(['all', 'dark', 'region'].includes(scope), 'ATLAS_TEST_SCOPE must be all, dark or region');
+assert.ok(['all', 'dark', 'region', 'resource'].includes(scope), 'ATLAS_TEST_SCOPE must be all, dark, region, or resource');
 const darkOnly = scope === 'dark';
+const inspectDark = scope === 'dark' || scope === 'all';
+const resourceOnly = scope === 'resource';
 const playwrightModule = process.env.PLAYWRIGHT_MODULE || 'playwright';
 const {chromium} = await import(path.isAbsolute(playwrightModule) ? pathToFileURL(playwrightModule).href : playwrightModule);
 await mkdir(output, {recursive: true});
@@ -36,6 +40,29 @@ const browser = await chromium.launch({
 const context = await browser.newContext({viewport: {width: 1440, height: 1000}, reducedMotion: 'reduce', colorScheme: 'light'});
 // Exercise the supported fallback used when clipboard access is unavailable on a private HTTP origin.
 await context.addInitScript(() => Object.defineProperty(navigator, 'clipboard', {configurable: true, get: () => undefined}));
+await context.addInitScript(() => {
+  // Test-only instrumentation: no renderer debug API, production polling, or new dependency.
+  const probe = window.__atlasResourceProbe = {callbacks: 0, draws: 0, triangles: 0, frames: 0, stamp: 0, drawnStamp: -1, lastDrawAt: 0, pending: new Set()};
+  const request = window.requestAnimationFrame.bind(window), cancel = window.cancelAnimationFrame.bind(window);
+  window.requestAnimationFrame = callback => {
+    const id = request(time => {probe.pending.delete(id); probe.callbacks++; probe.stamp = time; callback(time);});
+    probe.pending.add(id); return id;
+  };
+  window.cancelAnimationFrame = id => {probe.pending.delete(id); cancel(id);};
+  for (const type of [window.WebGLRenderingContext, window.WebGL2RenderingContext].filter(Boolean)) {
+    for (const name of ['drawArrays', 'drawElements', 'drawArraysInstanced', 'drawElementsInstanced']) {
+      if (!Object.hasOwn(type.prototype, name)) continue;
+      const draw = type.prototype[name];
+      type.prototype[name] = function (...args) {
+        probe.draws++; probe.lastDrawAt = performance.now();
+        if (probe.drawnStamp !== probe.stamp) {probe.frames++; probe.drawnStamp = probe.stamp;}
+        const count = args[name.startsWith('drawArrays') ? 2 : 1], instances = name.endsWith('Instanced') ? args.at(-1) : 1;
+        if (args[0] === this.TRIANGLES) probe.triangles += count / 3 * instances;
+        return draw.apply(this, args);
+      };
+    }
+  }
+});
 const page = await context.newPage();
 page.setDefaultTimeout(30_000);
 page.setDefaultNavigationTimeout(60_000);
@@ -56,9 +83,14 @@ const ready = async () => {
 };
 const screenshot = async (name, inspectSelection = false, inspectNeutral = false) => {
   await frame();
-  const png = await page.screenshot({path: path.join(output, `${name}.png`), timeout: 120_000});
+  // Observe the real demand renderer settling. Two animation callbacks alone
+  // can run before a queued GPU frame permits the newest selection to render.
+  await page.waitForFunction(() => window.__atlasResourceProbe.pending.size === 0 && performance.now() - window.__atlasResourceProbe.lastDrawAt > 150, null, {polling: 100, timeout: 30_000});
+  const started = performance.now();
+  const png = await page.screenshot({path: path.join(output, `${name}.png`), timeout: 60_000});
+  (report.screenshotTimings ??= []).push({name, milliseconds: Math.round(performance.now() - started)});
   report.screenshots.push(`${name}.png`);
-  if (!inspectSelection && !inspectNeutral && !darkOnly) return;
+  if (!inspectSelection && !inspectNeutral && !inspectDark) return;
   // Read the rendered image, excluding UI, so a correct DOM count cannot hide a lost camera fit.
   // This checks the existing renderer's green selection tint without exposing a scene debug API.
   const measurement = await page.evaluate(async ({encoded, inspectNeutral}) => {
@@ -98,7 +130,7 @@ const screenshot = async (name, inspectSelection = false, inspectNeutral = false
     assert.ok(measurement.pixels >= 80 && measurement.width >= 12 && measurement.height >= 12, `Focused anatomy must remain visibly framed after viewport changes: ${JSON.stringify(measurement)}`);
     (report.renderedSelections ??= []).push({screenshot: `${name}.png`, ...measurement});
   }
-  if (darkOnly) assert.ok(measurement.cornerLuminance.every(value => value < .1), `The rendered stage must remain dark: ${JSON.stringify(measurement.cornerLuminance)}`);
+  if (inspectDark) assert.ok(measurement.cornerLuminance.every(value => value < .1), `The rendered stage must remain dark: ${JSON.stringify(measurement.cornerLuminance)}`);
   if (inspectNeutral) (report.renderedContext ??= []).push({screenshot: `${name}.png`, ...measurement});
   return measurement;
 };
@@ -167,10 +199,12 @@ const darkChecks = async (course, atlas) => {
   if (course) {
     report.course = true; report.selectionCount = course.selections.length; report.objectiveCount = course.unmappedObjectives.length;
     const first = course.selections[0], term = course.concepts.find(item => item.id === first.conceptIds[0]);
+    await hash({course: course.courseId, selection: first.id});
     await state('data-mode', 'course');
-    await state('data-selected-count', first.elements.length);
+    await state('data-selected-count', 0);
     await darkSurfaces('.mode-switch,.course-panel,.course-detail,.course-dock');
     await darkSurfaces('.course-term-name strong,.course-term-name [lang],.course-side,.course-order,.course-evidence');
+    await page.locator('.source-disclosure > summary').click();
     await page.locator('.course-sources').scrollIntoViewIfNeeded();
     await darkSurfaces('.source-heading,.course-source-actions a');
     const source = page.locator('.course-source-actions a').first();
@@ -192,7 +226,7 @@ const darkChecks = async (course, atlas) => {
     assert.equal(await page.locator('.anatomy-search-results').evaluate(element => !!element.closest('main')), false, 'Search popup coverage must include its portalled surface');
     await screenshot('dark-search-portal');
     await page.getByRole('option').first().click();
-    await state('data-selected-count', term.elements.length);
+    await state('data-selected-count', resolveAtlasLink({mode: 'course', courseId: course.courseId, selectionId: first.id, structureId: term.id}, atlas, course).elements.length);
     await page.getByRole('button', {name: 'About this atlas', exact: true}).click();
     await page.locator('.about-sheet').waitFor();
     await darkSurfaces('.about-sheet,.about-copy,.about-sheet [data-slot=sheet-description]');
@@ -201,8 +235,8 @@ const darkChecks = async (course, atlas) => {
     await page.locator('.about-sheet').waitFor({state: 'hidden'});
     record('Portalled search results and About content inherit the default dark theme');
 
-    await hash({course: course.courseId, selection: first.id});
-    await state('data-selected-count', first.elements.length);
+    await hash({course: course.courseId, selection: first.id, structure: term.id});
+    await state('data-selected-count', resolveAtlasLink({mode: 'course', courseId: course.courseId, selectionId: first.id, structureId: term.id}, atlas, course).elements.length);
     for (const [width, height] of [[1440, 1000], [1024, 768], [768, 820], [390, 844], [320, 568], [844, 390]]) {
       await page.setViewportSize({width, height});
       await insideViewport('.course-detail');
@@ -217,11 +251,12 @@ const darkChecks = async (course, atlas) => {
     const objective = course.unmappedObjectives[0];
     if (objective) {
       const surrounding = course.selections.find(selection => selection.id === objective.contextSelectionId);
-      await hash({course: course.courseId, selection: surrounding.id});
-      await state('data-selected-count', surrounding.elements.length);
+      const target = surrounding.conceptIds[0];
+      await hash({course: course.courseId, selection: surrounding.id, structure: target});
+      await state('data-selected-count', resolveAtlasLink({mode: 'course', courseId: course.courseId, selectionId: surrounding.id, structureId: target}, atlas, course).elements.length);
       const highlighted = await screenshot('dark-highlighted-context-selection', true);
       await hash({course: course.courseId, objective: objective.id, context: '1'});
-      await state('data-selected-count', 0); await state('data-context-count', surrounding.elements.length);
+      await state('data-selected-count', 0); await state('data-context-count', resolveAtlasLink({mode: 'course', courseId: course.courseId, objectiveId: objective.id, context: true}, atlas, course).contextElements.length);
       await darkSurfaces('.unmapped-notice,.context-explanation,.context-action');
       const neutral = await screenshot('dark-neutral-context', false, true);
       assert.ok(neutral.neutral.pixels >= 80 && neutral.neutral.width >= 12 && neutral.neutral.height >= 12, `Neutral surrounding geometry must remain visible: ${JSON.stringify(neutral)}`);
@@ -252,203 +287,89 @@ const darkChecks = async (course, atlas) => {
   record('The full explorer, its controls, and isolated geometry remain usable on the dark 3D stage');
 };
 
-try {
-  if (darkOnly || scope === 'region') await darkFirstPaint();
-  await page.goto(base, {waitUntil: 'domcontentloaded'});
-  await ready();
-  const atlas = await (await page.request.get(new URL('/models/atlas.json', base).href)).json();
-  const response = await page.request.get(new URL('/api/course', base).href);
-  const runtime = response.ok() && response.headers()['content-type']?.includes('application/json') ? await response.json() : null;
-  if (process.env.ATLAS_TEST_REQUIRE_COURSE === '1' || process.env.ATLAS_COURSE_FILE) assert.ok(runtime?.course, 'The configured private course must be available');
-  const course = runtime?.course;
-  record('The existing catalogue and WebGL renderer load');
-
-  if (scope === 'region' || (course?.selections.every(s => s.region) && scope === 'all')) await regionalChecks({page,course,atlas,runtime,base,state,hash,ready,screenshot,record,insideViewport,openSearch,report});
-  else if (darkOnly) await darkChecks(course, atlas);
-  else {
-  if (course) {
-    report.course = true;
-    report.selectionCount = course.selections.length;
-    report.objectiveCount = course.unmappedObjectives.length;
-    await state('data-mode', 'course');
-    assert.equal(await page.locator('.course-selection-list button').count(), course.selections.length);
-    const terms = new Map(course.concepts.map(term => [term.id, term]));
-    const sourceHrefs = new Set();
-    const collectSources = async bindingIds => {
-      const hrefs = await page.locator('.course-sources a').evaluateAll(anchors => anchors.map(anchor => anchor.getAttribute('href')));
-      for (const id of bindingIds) {
-        const binding = course.noteBindings[id];
-        assert.ok(hrefs.includes(`/api/course/sources/${encodeURIComponent(id)}/pdf#page=${binding.courseSource.page}`), 'A PDF link must keep its exact bound page');
-        if (runtime.links.vaultName) {
-          const rootPrefix = runtime.links.vaultRoot ? `${runtime.links.vaultRoot}/` : '';
-          const expectedFile = `${binding.note.path.slice(rootPrefix.length)}#${binding.note.heading}`;
-          assert.ok(hrefs.some(href => href.startsWith('obsidian://') && new URL(href).searchParams.get('file') === expectedFile), 'An Obsidian return link must retain the exact note and heading');
-        }
-      }
-      for (const href of hrefs) {
-        assert.ok(href && !href.includes('undefined'), 'Sources must use fully bound routes');
-        if (href.startsWith('/api/course/sources/')) sourceHrefs.add(href.split('#')[0]);
-      }
-    };
-    for (const [index, selection] of course.selections.entries()) {
-      await page.locator('.course-selection-list button').nth(index).click();
-      await state('data-selected-count', selection.elements.length);
-      await state('data-context-count', 0);
-      assert.equal(params().get('selection'), selection.id);
-      assert.equal(await page.locator('.course-terms > li').count(), selection.conceptIds.length);
-      for (const [termIndex, id] of selection.conceptIds.entries()) {
-        const term = terms.get(id);
-        const text = await page.locator('.course-terms > li').nth(termIndex).innerText();
-        for (const value of [term.labels.sl, term.labels.la, term.name]) assert.ok(text.includes(value), 'Each course term keeps all three source labels');
-      }
-    }
-    record(`${course.selections.length} ordered selections retain exact mesh counts and three-language terminology`);
-
-    const first = course.selections[0];
-    await page.locator('.course-selection-list button').first().click();
-    const firstTerm = terms.get(first.conceptIds[0]);
-    await page.locator('.course-terms button').first().click();
-    await state('data-selected-count', firstTerm.elements.length);
-    assert.equal(params().get('structure'), firstTerm.id);
-    const termUrl = page.url();
-
-    const copy = page.getByRole('button', {name: 'Kopiraj povezavo do trenutnega izbora', exact: true});
-    await copy.click();
-    await page.locator('.copy-fallback input').waitFor();
-    assert.equal(await page.locator('.copy-fallback input').inputValue(), page.url());
-    await page.locator('.copy-fallback input').press('Escape');
-    await page.locator('.copy-fallback').waitFor({state: 'hidden'});
-    assert.ok(await page.locator('.course-detail').isVisible(), 'Closing the copy fallback must preserve the inspector');
-    await copy.click();
-    await page.locator('.copy-fallback input').waitFor();
-    await page.getByRole('button', {name: 'front view', exact: true}).click();
-    await page.locator('.copy-fallback').waitFor({state: 'hidden'});
-    record('Unavailable clipboard access exposes the exact link and dismisses on Escape or blur');
-
-    for (const label of [firstTerm.labels.sl, firstTerm.labels.la, firstTerm.name]) {
-      await openSearch(label);
-      await page.getByRole('option').first().click();
-      await state('data-active-structure', firstTerm.id);
-      await state('data-selected-count', firstTerm.elements.length);
-    }
-    record('Slovenian, Latin, and English search reach the same catalogue structure');
-
-    const multiple = course.concepts.find(term => term.elements.length > 1);
-    if (multiple) {
-      const selection = course.selections.find(item => item.conceptIds.includes(multiple.id));
-      await hash({course: course.courseId, selection: selection.id, structure: multiple.id});
-      await state('data-active-structure', multiple.id);
-      await page.locator('.course-meshes button').last().click();
-      await state('data-selected-count', 1);
-      assert.equal(params().get('mesh'), multiple.elements.at(-1));
-      const mesh = atlas.parts.find(part => part.id === multiple.elements.at(-1));
-      const side = mesh.name.match(/^(left|right)\b/i)?.[1].toLowerCase();
-      if (side) assert.ok((await page.locator('.course-term-meta').innerText()).includes(side === 'left' ? 'Izbrano: levo' : 'Izbrano: desno'), 'The single mesh badge must show its own side');
-      assert.ok((await page.locator('.course-mesh-selection').innerText()).includes(mesh.name));
-      record('A single side/model of a grouped concept has its own stable mesh link');
-    }
-
-    await hash({course: course.courseId, selection: first.id});
-    await state('data-selected-count', first.elements.length);
-    for (const view of ['front', 'back', 'side']) {
-      const button = page.getByRole('button', {name: `${view} view`, exact: true});
-      await button.click();
-      await page.waitForFunction(view => document.querySelector(`button[aria-label="${view} view"]`)?.getAttribute('aria-pressed') === 'true', view);
-      assert.equal(params().get('view'), view);
-    }
-    record('Isolated selections accept front, back, and side camera controls');
-
-    if (course.selections.length > 1) {
-      await page.locator('.course-selection-list button').first().click();
-      const historyLength = await page.evaluate(() => history.length);
-      await page.locator('.course-selection-list button').first().click();
-      assert.equal(await page.evaluate(() => history.length), historyLength, 'Choosing the active selection must not add duplicate history');
-      await page.locator('.course-selection-list button').nth(1).click();
-      await page.goBack();
-      await state('data-selected-count', first.elements.length);
-      assert.equal(params().get('selection'), first.id);
-      await page.goForward();
-      await state('data-selected-count', course.selections[1].elements.length);
-      assert.equal(params().get('selection'), course.selections[1].id);
-      record('Browser Back and Forward restore the preceding study selection');
-    }
-
-    if (course.unmappedObjectives.length) {
-      await page.locator('.unmapped-list summary').click();
-      for (const [index, objective] of course.unmappedObjectives.entries()) {
-        await page.locator('.unmapped-list button').nth(index).click();
-        await state('data-selected-count', 0);
-        await state('data-context-count', 0);
-        assert.equal(params().get('objective'), objective.id);
-        assert.ok(await page.locator('.unmapped-notice').isVisible());
-        await page.locator('.context-action').click();
-        const surrounding = course.selections.find(selection => selection.id === objective.contextSelectionId);
-        await state('data-selected-count', 0);
-        await state('data-context-count', surrounding.elements.length);
-        assert.equal(params().get('context'), '1');
-        assert.ok(await page.locator('.context-explanation').isVisible());
-        await collectSources(objective.noteBindingIds);
-      }
-      record(`${course.unmappedObjectives.length} unmapped objectives select no meshes; explicit context remains unhighlighted`);
-      await screenshot('unmapped-neutral-context');
-    }
-
-    for (let index = 0; index < course.selections.length; index++) {
-      await page.locator('.course-selection-list button').nth(index).click();
-      await collectSources(course.selections[index].noteBindingIds);
-    }
-    for (const href of sourceHrefs) {
-      const source = await page.request.head(new URL(href, base).href);
-      assert.equal(source.status(), 200, 'Each exposed source route must resolve');
-      assert.match(source.headers()['cache-control'] || '', /no-store/);
-    }
-    report.sourceCount = sourceHrefs.size;
-    record(`${sourceHrefs.size} bound PDF, figure, and capture routes resolve privately`);
-
-    await hash({course: course.courseId, selection: first.id});
-    await state('data-selected-count', first.elements.length);
-    for (const [width, height] of [[1440, 1000], [1024, 768], [390, 844], [320, 568], [844, 390]]) {
-      await page.setViewportSize({width, height});
-      await insideViewport('.course-detail');
-      assert.ok(await page.locator('.course-detail .detail-scroll').evaluate(element => element.clientHeight >= 40), 'The study list must retain a usable scroll region');
-      const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
-      assert.equal(overflow, false, 'Study controls must not create horizontal page overflow');
-      await screenshot(`course-${width}x${height}`, true);
-    }
-    record('Desktop, compact desktop, small portrait, portrait, and landscape retain usable controls and visible focused anatomy after resize');
-
-    await page.setViewportSize({width: 390, height: 844});
-    await page.getByRole('button', {name: 'Odpri študijske izbore', exact: true}).click();
-    await insideViewport('.course-panel');
-    await page.locator('.course-selection-list button').last().click();
-    await state('data-selected-count', course.selections.at(-1).elements.length);
-    assert.equal(await page.locator('.course-detail').count(), 0, 'A mobile selection should initially leave the model unobstructed');
-    await page.getByRole('button', {name: 'Prikaži izraze in vire', exact: true}).click();
-    await insideViewport('.course-detail');
-    await screenshot('mobile-selection-details');
-    record('The mobile selection drawer closes after a choice and details reopen from the dock');
-
-    await page.setViewportSize({width: 1440, height: 1000});
-    await page.goto(termUrl, {waitUntil: 'domcontentloaded'});
-    await page.reload({waitUntil: 'domcontentloaded'});
-    await ready();
-    await state('data-active-structure', firstTerm.id);
-    assert.equal(page.url(), termUrl);
-    record('A structure deep link restores its exact selection after reload');
-
-    await hash({course: course.courseId, structure: 'browser-check-missing-structure'});
-    await state('data-mode', 'explorer');
-    await state('data-selected-count', 0);
-    await state('data-context-count', 0);
-    await state('data-active-structure', '');
-    await page.locator('.course-status[role=alert]').waitFor();
-    await page.getByRole('button', {name: 'front view', exact: true}).click();
-    assert.equal(params().get('explorer'), '1');
-    assert.equal(params().has('course'), false);
-    assert.equal(params().has('structure'), false);
-    record('An invalid deep link clears its previous target before subsequent camera actions');
+const resourceChecks = async atlas => {
+  const baseline = process.env.ATLAS_RESOURCE_BASELINE === '1';
+  report.resource = {baseline, viewport: page.viewportSize(), note: 'Headless rendering work only; these are not Mac RAM, energy, or device FPS measurements.', measurements: {}};
+  const read = () => page.evaluate(() => {
+    const p = window.__atlasResourceProbe;
+    return {callbacks: p.callbacks, draws: p.draws, triangles: p.triangles, frames: p.frames, pending: p.pending.size, at: performance.now()};
+  });
+  const measure = async (name, action = async () => {}, expectDraw = false) => {
+    const before = await read(); await action();
+    if (expectDraw) await page.waitForFunction(draws => window.__atlasResourceProbe.draws > draws, before.draws, {polling: 100, timeout: 30_000});
+    await page.waitForTimeout(1000); const after = await read();
+    const result = Object.fromEntries(['callbacks', 'draws', 'triangles', 'frames'].map(key => [key, after[key] - before[key]]));
+    Object.assign(result, {milliseconds: Math.round(after.at - before.at), pending: after.pending, drawsPerFrame: result.frames ? result.draws / result.frames : 0, trianglesPerFrame: result.frames ? result.triangles / result.frames : 0});
+    report.resource.measurements[name] = result; console.log(`RESOURCE ${name} ${JSON.stringify(result)}`); return result;
+  };
+  const quiet = async name => {
+    // Timer polling belongs only to this bounded test, so it cannot create measured animation callbacks.
+    await page.waitForFunction(baseline => performance.now() - window.__atlasResourceProbe.lastDrawAt > 600 && (baseline || window.__atlasResourceProbe.pending.size === 0), baseline, {polling: 100, timeout: 30_000});
+    const value = await measure(name);
+    if (!baseline) assert.ok(value.callbacks === 0 && value.draws === 0 && value.pending === 0, `${name} must have no idle animation work: ${JSON.stringify(value)}`);
+    return value;
+  };
+  const advances = async (name, action) => {const value = await measure(name, action, true); assert.ok(value.draws > 0, `${name} must render`); return value;};
+  const centerFrame = () => page.screenshot({clip: {x: 500, y: 210, width: 430, height: 530}});
+  const moves = async (name, action) => {const before = await centerFrame(); await advances(name, action); await quiet(`${name}-idle`); assert.ok(!before.equals(await centerFrame()), `${name} must change the rendered anatomy`);};
+  await state('data-mode', 'explorer'); await quiet('default-idle');
+  const full = await advances('default-camera', () => page.getByRole('button', {name: 'front view', exact: true}).click());
+  await quiet('default-camera-idle');
+  await advances('skeleton-change', () => page.getByRole('button', {name: 'Skeleton', exact: true}).click());
+  await quiet('skeleton-idle');
+  if (baseline) {record('Baseline idle callbacks and default/skeleton draw work recorded at the same viewport'); return;}
+  await page.getByRole('button', {name: 'Rotate body', exact: true}).click();
+  const skeleton = await advances('skeleton-rotation');
+  if (!baseline) assert.ok(skeleton.trianglesPerFrame < full.trianglesPerFrame && skeleton.drawsPerFrame < full.drawsPerFrame, 'Hidden systems must reduce submitted geometry and draw calls');
+  for (const [name, property, value] of [['hidden', 'display', 'none'], ['offscreen', 'transform', 'translateX(200vw)']]) {
+    await page.locator('.scene').evaluate((element, {property, value}) => {element.style[property] = value;}, {property, value});
+    await page.waitForFunction(() => window.__atlasResourceProbe.pending.size === 0, null, {polling: 100, timeout: 30_000});
+    const suspended = await measure(`${name}-rotation`);
+    if (!baseline) assert.ok(suspended.callbacks === 0 && suspended.draws === 0 && suspended.pending === 0, `${name} stage must suspend rotation`);
+    await advances(`${name}-resume`, () => page.locator('.scene').evaluate((element, property) => {element.style[property] = '';}, property));
   }
+  await page.getByRole('button', {name: 'Pause rotation', exact: true}).click(); await quiet('rotation-stopped');
+  await moves('camera-change', () => page.getByRole('button', {name: 'side view', exact: true}).click());
+  await moves('orbit', async () => {await page.mouse.move(780, 440); await page.mouse.down(); await page.mouse.move(860, 470, {steps: 8}); await page.mouse.up();});
+  await moves('zoom', async () => {await page.mouse.move(740, 430); await page.mouse.wheel(0, -180);});
+  await moves('explode', async () => {await page.getByRole('slider').focus(); await page.getByRole('slider').press('End');});
+  assert.equal(await page.getByRole('slider').inputValue(), '100');
+  // Exercise the original failing transition directly: Reset must restore every
+  // system while reassembling an exploded inventory, without an intermediate Home.
+  await advances('reset-from-skeleton-inventory', () => page.getByRole('button', {name: 'Assemble and reset', exact: true}).click());
+  await quiet('reset-from-skeleton-inventory-idle');
+  assert.equal(await page.getByRole('slider').inputValue(), '0');
+  await screenshot('resource-full-body-after-reset');
+  await moves('all-system-explode', () => page.getByRole('slider').press('End'));
+  await advances('reset-from-all-system-inventory', () => page.getByRole('button', {name: 'Assemble and reset', exact: true}).click());
+  await quiet('reset-from-all-system-inventory-idle');
+  await screenshot('resource-full-body-after-all-system-reset');
+  await page.getByRole('button', {name: 'Hide all', exact: true}).click(); await quiet('hidden-systems-idle');
+  const femur = atlas.concepts.find(concept => concept.name.toLowerCase() === 'femur');
+  await openSearch(femur.name);
+  const selected = await advances('hidden-layer-selection', () => page.getByRole('option').first().click());
+  await state('data-selected-count', femur.elements.length); await quiet('selection-idle');
+  if (!baseline) assert.ok(selected.trianglesPerFrame < skeleton.trianglesPerFrame, 'A selected part must restore only its required batch');
+  await screenshot('resource-hidden-layer-selection', true);
+  await advances('isolate-selection', () => page.getByRole('button', {name: 'Isolate structure', exact: true}).click()); await quiet('isolated-idle');
+  const rendered = await screenshot('resource-isolated-selection', true);
+  await page.mouse.click(rendered.sample.x, rendered.sample.y); await state('data-selected-count', 1); await quiet('picked-idle');
+  assert.ok(femur.elements.includes(params().get('mesh')), 'The shared geometry must preserve exact picking');
+  record('Resource lifecycle, camera/orbit/zoom/explosion, hidden-layer highlight, isolation, and exact picking remain functional');
+  if (!baseline) {
+    let release, intercepted;
+    const waiting = new Promise(resolve => {release = resolve;}), requested = new Promise(resolve => {intercepted = resolve;});
+    await page.route(/\/models\/body-\d+\.bin(?:\.gz)?$/, async route => {intercepted(); await waiting; await route.continue().catch(() => {});});
+    await page.reload({waitUntil: 'domcontentloaded'}); await page.locator('.scene canvas').waitFor(); await requested;
+    // Exercise the real error handler before delayed model downloads can report 100%.
+    await page.locator('.scene canvas').evaluate(canvas => canvas.dispatchEvent(new Event('webglcontextlost', {cancelable: true})));
+    release(); await page.locator('.loading.error').waitFor(); await quiet('context-lost-during-load');
+    assert.match(await page.locator('.loading.error').innerText(), /paused.*Reload/s);
+    record('Context loss during a delayed model load keeps the reload message and stops animation callbacks');
+  }
+};
 
+const explorerChecks = async atlas => {
   await page.setViewportSize({width: 1440, height: 1000});
   await hash({explorer: '1'});
   await state('data-mode', 'explorer');
@@ -480,7 +401,6 @@ try {
   await state('data-selected-count', femur.elements.length);
   assert.equal(await page.getByRole('slider').inputValue(), '100', 'Selecting from inventory must preserve its explosion amount');
   assert.equal(params().get('view'), 'front');
-  await page.evaluate(() => new Promise(resolve => {let remaining = 90; const tick = () => --remaining ? requestAnimationFrame(tick) : resolve(); requestAnimationFrame(tick);}));
   const rendered = await screenshot('explorer-selected-inventory', true);
   await page.mouse.click(rendered.sample.x, rendered.sample.y);
   await state('data-selected-count', 1);
@@ -491,6 +411,27 @@ try {
   await state('data-selected-count', 0);
   await screenshot('preserved-explorer');
   record('Full explorer search, isolation, skeleton preset, exploded inventory, and reset remain functional');
+};
+
+try {
+  if (!resourceOnly) await darkFirstPaint();
+  if (resourceOnly) await hash({explorer: '1'});
+  else await page.goto(base, {waitUntil: 'domcontentloaded'});
+  await ready();
+  const atlas = await (await page.request.get(new URL('/models/atlas.json', base).href)).json();
+  const response = await page.request.get(new URL('/api/course', base).href);
+  const runtime = response.ok() && response.headers()['content-type']?.includes('application/json') ? await response.json() : null;
+  if (process.env.ATLAS_TEST_REQUIRE_COURSE === '1' || process.env.ATLAS_COURSE_FILE) assert.ok(runtime?.course, 'The configured private course must be available');
+  const course = runtime?.course;
+  record('The existing catalogue and WebGL renderer load');
+
+  if (resourceOnly) await resourceChecks(atlas);
+  else if (scope === 'region') await regionalChecks({page,course,atlas,runtime,base,state,hash,ready,screenshot,record,insideViewport,openSearch,report});
+  else if (darkOnly) await darkChecks(course, atlas);
+  else {
+    if (course) await regionalChecks({page,course,atlas,runtime,base,state,hash,ready,screenshot,record,insideViewport,openSearch,report});
+    await darkChecks(course, atlas);
+    await explorerChecks(atlas);
   }
   assert.deepEqual(pageErrors, [], 'Browser runtime must not throw uncaught errors');
   record('No uncaught page errors');
@@ -498,7 +439,7 @@ try {
   console.log(`Browser checks complete. Local screenshots/report: ${output}`);
 } catch (error) {
   await page.screenshot({path: path.join(output, 'failed.png'), timeout: 60_000}).catch(() => {});
-  await writeFile(path.join(output, 'failure.json'), `${JSON.stringify({error: error.message, pageErrors, completed: report.checks}, null, 2)}\n`);
+  await writeFile(path.join(output, 'failure.json'), `${JSON.stringify({error: error.message, pageErrors, completed: report.checks, resource: report.resource, screenshotTimings: report.screenshotTimings}, null, 2)}\n`);
   throw error;
 } finally {
   await browser.close();

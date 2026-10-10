@@ -13,6 +13,8 @@
     "serve:private": "node --experimental-strip-types server/private-runtime.mjs",
     "test:runtime": "node --experimental-strip-types --test scripts/private-runtime.test.mjs scripts/private-build-guard.test.mjs",
     "test:course": "node --experimental-strip-types scripts/validate-course.mjs && node --experimental-strip-types --test scripts/study-region.test.mjs",
+    "test:geometry": "node --experimental-strip-types --test scripts/model-geometry.test.mjs",
+    "test:scene": "node --experimental-strip-types --test scripts/scene-frame.test.mjs",
     "test:browser": "node --experimental-strip-types scripts/validate-browser.mjs",
     "course:links": "node --experimental-strip-types scripts/course-links.mjs"
   },

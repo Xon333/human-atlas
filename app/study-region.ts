@@ -4,10 +4,19 @@ import type {Atlas, Part} from './anatomy';
 export type StudySide = 'right' | 'left' | 'both';
 export type StudyLayer = 'bones' | 'muscles' | 'all';
 export interface StudyRegion {
+  label?: string;
   conceptIds: string[];
   elements: string[];
   defaultSide: StudySide;
   defaultLayer: StudyLayer;
+}
+
+// These original flexor-pollicis-brevis meshes occupy the hand opposite to the
+// side in their source names. Keep their IDs, names and geometry untouched, but
+// do not assign either to a single-side view until its source identity is verified.
+const SOURCE_SIDE_CONFLICTS = new Set(['FJ1469', 'FJ1469M']);
+export function hasSourceSideConflict(elements: readonly string[]): boolean {
+  return elements.some(id => SOURCE_SIDE_CONFLICTS.has(id));
 }
 
 export function partSide(part: Pick<Part, 'name'>): 'right' | 'left' | null {
@@ -27,6 +36,7 @@ export function regionElements(atlas: Atlas, elements: readonly string[], side: 
   const muscles = muscleClass ? new Set(muscleClass.elements) : null;
   return atlas.parts.filter(part => {
     if (!included.has(part.id)) return false;
+    if (side !== 'both' && SOURCE_SIDE_CONFLICTS.has(part.id)) return false;
     const sided = partSide(part);
     if (side !== 'both' && sided && sided !== side) return false;
     const bone = bones ? bones.has(part.id) : part.system === 'skeletal';

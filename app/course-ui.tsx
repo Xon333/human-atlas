@@ -4,7 +4,7 @@ import {Button} from '@/components/ui/button';
 import {Badge} from '@/components/ui/badge';
 import {Sheet, SheetContent, SheetTitle, SheetDescription} from '@/components/ui/sheet';
 import type {Part, Concept} from './anatomy';
-import {partSide, type StudySide, type StudyLayer} from './study-region';
+import {partSide, hasSourceSideConflict, type StudySide, type StudyLayer} from './study-region';
 import type {CourseOverlay, CourseLinks, CourseConcept, CourseSelection, UnmappedObjective, Evidence, Laterality} from './course';
 import {obsidianUrl, spaceoSourceUrl} from './course-navigation';
 
@@ -32,7 +32,7 @@ export function CoursePanel({course, selectionId, objectiveId, mobileOpen, onClo
     <div className="panel-heading"><span><BookOpen size={16}/> Predeli</span><Badge variant="secondary">{course.selections.length}</Badge><Button variant="ghost" className="course-mobile-close icon-button" onClick={onClose} aria-label="Zapri izbore"><X size={18}/></Button></div>
     <div className="course-panel-scroll">
       <nav className="course-selection-list" aria-label="Anatomski izbori">{course.selections.map((selection, index) => <Button variant="ghost" key={selection.id} aria-pressed={selectionId === selection.id && !objectiveId} onClick={() => onSelection(selection)}>
-        <span className="course-index">{String(index + 1).padStart(2, '0')}</span><span>{selection.label}</span><ChevronRight size={14}/>
+        <span className="course-index">{String(index + 1).padStart(2, '0')}</span><span>{selection.region?.label ?? selection.label}</span><ChevronRight size={14}/>
       </Button>)}</nav>
       {course.unmappedObjectives.length > 0 && <details className="unmapped-list" open={objectiveId ? true : undefined}>
         <summary>Prepoznaj v viru <Badge variant="outline">{course.unmappedObjectives.length}</Badge></summary>
@@ -80,7 +80,7 @@ export function CourseInspector({course, links, selection, term, objective, mesh
   const heading = useRef<HTMLHeadingElement>(null), list = useRef<HTMLOListElement>(null);
   const terms = new Map(course.concepts.map(item => [item.id, item]));
   const scope = new Set(scopeElements ?? selection?.elements ?? []), selected = new Set(selectedIds);
-  const title = objective ? (objective.shortLabel || objective.labels.sl) : selection?.label;
+  const title = objective ? (objective.shortLabel || objective.labels.sl) : selection?.region?.label ?? selection?.label;
   const bindings = objective?.noteBindingIds ?? term?.noteBindingIds ?? selection?.noteBindingIds ?? [];
   const taught = selection?.conceptIds.map(id => terms.get(id)!).filter(Boolean) ?? [];
   const claimed = new Set<string>();
@@ -99,7 +99,9 @@ export function CourseInspector({course, links, selection, term, objective, mesh
     current?.scrollIntoView({block:'nearest', inline:'nearest'});
   }, [selectedIds, open]);
   const pickedName = mesh && !term ? mesh.name : term?.labels.sl ?? target?.name;
-  const pickedSide = mesh ? partSide(mesh) : side === 'both' ? null : side;
+  const pickedSideConflict = hasSourceSideConflict(mesh ? [mesh.id] : target?.elements ?? []);
+  const pickedSide = pickedSideConflict ? null : mesh ? partSide(mesh) : side === 'both' ? null : side;
+  const regionSideConflict = hasSourceSideConflict(selection?.region?.elements ?? []);
   return <Sheet open={open} modal={false} disablePointerDismissal onOpenChange={onOpenChange}>
     <SheetContent initialFocus={heading} className={`detail-sheet course-detail glass ${isolate || context ? 'is-isolated' : ''}`} lang="sl">
       <div className="detail-header">
@@ -119,8 +121,8 @@ export function CourseInspector({course, links, selection, term, objective, mesh
           <details className="mapping-reason"><summary>Vir in omejitev</summary><p>{EVIDENCE[objective.evidence]}</p><p lang="en">{objective.reason}</p></details>
           <SourceLinks course={course} links={links} ids={bindings}/>
         </> : <>
-          <div className="region-selection" role="status" aria-live="polite">
-            {pickedName ? <><strong>{pickedName}</strong>{pickedSide && <span className="picked-side">{SIDES[pickedSide]}</span>}{term?.labels.la && <small lang="la">{term.labels.la}</small>}</> : <span>Izberi ime ali strukturo</span>}
+          <div className={`region-selection${pickedSideConflict ? ' source-side-conflict' : ''}`} role="status" aria-live="polite">
+            {pickedName ? <><strong>{pickedName}</strong>{pickedSideConflict ? <span className="picked-side">Neskladna oznaka strani v viru</span> : pickedSide && <span className="picked-side">{SIDES[pickedSide]}</span>}{term?.labels.la && <small lang="la">{term.labels.la}</small>}</> : <span>Izberi ime ali strukturo</span>}
           </div>
           <ol className="course-terms" ref={list} aria-label="Strukture v predelu">{rows.map((row,index) => <li key={row.id}>
             <Button variant="ghost" aria-pressed={row.elements.some(id => selected.has(id))} data-mesh={row.part?.id} data-course-term={row.term ? 'true' : 'false'} title={row.term ? `${row.english} · oznaka iz gradiva` : `${row.english} · izvorno ime v atlasu, brez potrjene oznake iz gradiva`} onClick={() => row.term ? onTerm(row.term) : onPart(row.part!.id)}>
@@ -129,7 +131,7 @@ export function CourseInspector({course, links, selection, term, objective, mesh
           </li>)}</ol>
           <div className="region-legend"><span className="course-source-dot"/> Iz gradiva · ostalo: izvorna imena</div>
           {selection?.orderDescription && <details className="course-order"><summary>Zaporedje in poudarek</summary><p>{selection.orderDescription}</p><p>{EVIDENCE[selection.evidence]}</p></details>}
-          {bindings.length > 0 && <details className="source-disclosure"><summary>{term ? 'Zapisek in viri' : 'Viri predela'}</summary><SourceLinks course={course} links={links} ids={bindings}/></details>}
+          {bindings.length > 0 && <details className="source-disclosure"><summary>{term ? 'Zapisek in viri' : 'Viri predela'}</summary>{selection?.region?.label && <p>{selection.label}</p>}{regionSideConflict && <p className="context-note">Dva modela flexor pollicis brevis imata neskladno oznako strani; prikazana sta samo pri izbiri Obe.</p>}<SourceLinks course={course} links={links} ids={bindings}/></details>}
           {target && <details className="mapping-reason"><summary>Podatki o strukturi</summary><p lang="en">{target.name}</p><p>{target.id}{mesh ? ` · ${mesh.id}` : ''}</p>{term ? <p>{SIDES[term.laterality]} · izraz iz gradiva</p> : <p>Izvorno ime v atlasu. Izpitna zahteva ni določena.</p>}</details>}
         </>}
       </div>

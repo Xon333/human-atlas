@@ -17,9 +17,11 @@ Both the full explorer and UNI study mode open with a dark interface and 3D stag
 
 ## UNI study mode
 
-An optional private runtime connects the existing atlas to SpaceO's validated anatomy course overlay. A configured deployment opens directly into its prepared selections, with ordered Slovenian/Latin/English terms, explicit laterality, exact mesh selection, source-backed evidence labels, and links to the original notes and teaching sources. The full explorer remains one click away.
+An optional private runtime connects the existing atlas to SpaceO's validated anatomy course overlay. A configured deployment opens a complete anatomical region in its normal colours. Selecting a name or mesh highlights that structure within the surrounding anatomy. The regional list stays available, and selecting within an unchanged open region preserves the camera. Side and layer controls refine the region, and isolation remains an explicit optional action. The full explorer remains one click away.
 
-Objectives without verified model geometry are identified in their original sources. Their optional context view shows surrounding bones in their normal material, with **no target highlight**. Course data stays in SpaceO or ignored local runtime inputs; it is never part of the public static build.
+The regional list preserves authored Slovenian/Latin/English terms and their learning order, then includes additional source-named meshes for context. Those additional meshes do not acquire teaching labels, evidence or exam requirements. A region's navigation label can describe the whole anatomical area while the original teaching-selection label and sources remain available in its disclosure. Existing taught-structure links also recover their authored region.
+
+Objectives without verified model geometry are identified in their original sources. Their optional context view shows surrounding anatomy in its normal material, with **no target highlight**. Course data stays in SpaceO or ignored local runtime inputs; it is never part of the public static build.
 
 See [runtime configuration and scene links](docs/course-runtime.md). The implementation's remaining Mac/OMV work is bounded by [the native handoff](docs/NATIVE.md).
 
@@ -39,15 +41,17 @@ Open http://localhost:3016. To build the static site, run `npm run build`; the o
 ```sh
 npm run check
 node scripts/validate-atlas.mjs
-node scripts/validate-interactions.mjs
+node --experimental-strip-types scripts/validate-interactions.mjs
 npm run test:course
+npm run test:geometry
+npm run test:scene
 npm run test:runtime
 npm run build
 ```
 
-Validation covers mesh buffers, names and concept membership, nonoverlapping exploded layouts at desktop and mobile aspect ratios, search and inspection contracts, and tap-versus-drag handling. Browser interaction checks have exercised selection, system controls, search, isolation, rotation, and 390×844, 320×568, and 844×390 layouts. Phone controls stay clear of the exploded inventory, and isolated structures fit the space above or beside the detail panel. Physical-device performance and real multitouch hardware have not been tested.
+Validation covers exact geometry and bounded raycasts across shared buffers, GPU-frame fallback and cleanup, visible animation timing, nonoverlapping exploded layouts, search and inspection contracts, and tap-versus-drag handling. Browser checks exercise desktop and narrow/mobile layouts, contextual selection, system controls, search, explicit isolation, orbit, zoom, rotation and exploded-inventory Reset. Physical-device integration and resource measurements belong to the existing native acceptance record in [the handoff](docs/NATIVE.md).
 
-Course checks cover catalogue-byte identity, exact ordered mesh membership, multilingual/source contracts, unmapped-objective separation, reloadable links, private runtime boundaries, and accidental inclusion of local course files in public builds. These repeatable tests use public synthetic fixtures. The optional [browser checker](scripts/validate-browser.mjs) uses a locally available Playwright/Chromium installation and reads its test overlay from the private runtime; it writes results only to ignored local storage. With that environment configured, `ATLAS_TEST_SCOPE=dark ATLAS_TEST_REQUIRE_COURSE=1 npm run test:browser` checks first paint, UI and portal contrast, source controls, keyboard focus, resized framing and highlighted targets versus neutral context. The default scope retains the complete interaction suite.
+Course checks cover catalogue-byte identity, authored versus regional mesh membership, multilingual/source contracts, unmapped-objective separation, side/layer links and legacy routes, private runtime boundaries, and accidental inclusion of local course files in public builds. Repeatable source tests use public synthetic fixtures and the public anatomy catalogue. The optional [browser checker](scripts/validate-browser.mjs) reuses a locally available Playwright/Chromium installation and reads any course overlay from the private runtime; its reports stay in ignored local storage. With that environment configured, `ATLAS_TEST_SCOPE=regional ATLAS_TEST_REQUIRE_COURSE=1 npm run test:browser` checks a real regional export, `ATLAS_TEST_SCOPE=dark` checks the interface and portals, and `ATLAS_TEST_SCOPE=resource` checks idle/hidden work, GPU scheduling and full-inventory Reset. The default scope retains the complete interaction suite. Software-rendered cloud results do not establish device FPS, battery use or process memory.
 
 ## Anatomy data
 
@@ -59,7 +63,9 @@ This is an educational explorer, not a diagnostic or surgical tool.
 
 ## How it works
 
-Geometry is merged into batches. Per-structure GPU textures control translation, visibility, and selection, while component geometry supports accurate picking. Exploded layouts pack only the visible pieces. Rendering updates when the scene changes; orbit controls remain responsive without thousands of separate draw calls.
+Geometry is merged into batches; rendering and per-part picking share the same position, packed-normal and index buffers. Each picker retains its own bounds and index range. The existing per-structure GPU textures control translation, visibility and selection, while whole hidden batches skip drawing. Exploded layouts pack only visible pieces. All source meshes and their geometry detail remain available.
+
+Rendering wakes for scene changes, input, model arrival or resize and stops when the viewer settles or becomes hidden. A nonblocking WebGL2 fence keeps at most one anatomy frame in flight, coalescing later changes to the newest state. Animation uses elapsed visible time, so a slow GPU does not accumulate stale reassembly frames; hidden time does not advance it. WebGL1 and unavailable fences keep the normal rendering path. Cleanup cancels pending work and releases the scene's GPU resources. Development uses the platform's file events rather than forced polling.
 
 The optional WebMCP tools expose anatomy search and inspection in compatible browsers. The visible interface works without them.
 

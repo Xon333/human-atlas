@@ -254,7 +254,7 @@ export function validateCourseOverlay(input: unknown, atlas: Atlas, catalogBlobS
       requireValue(elements.every(mesh => seen.has(mesh)), `${id}: region must contain every taught target`);
       requireValue(['right','left','both'].includes(input.defaultSide as string), `${id}: invalid regional side`);
       requireValue(['bones','muscles','all'].includes(input.defaultLayer as string), `${id}: invalid regional layer`);
-      region = {conceptIds: regionConcepts, elements: regionMeshes, defaultSide: input.defaultSide as StudySide, defaultLayer: input.defaultLayer as StudyLayer};
+      region = {conceptIds: regionConcepts, elements: regionMeshes, defaultSide: input.defaultSide as StudySide, defaultLayer: input.defaultLayer as StudyLayer, ...(input.label !== undefined ? {label: text(input.label, `${id}.region.label`)} : {})};
     }
     return { id, label: text(item.label, `${id}.label`), conceptIds: ids, elements, noteBindingIds, evidence: evidence(item, noteBindingIds, id), ...(region ? {region} : {}), ...(item.orderDescription !== undefined ? { orderDescription: text(item.orderDescription, `${id}.orderDescription`) } : {}) };
   });
