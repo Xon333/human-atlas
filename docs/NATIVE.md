@@ -1,24 +1,47 @@
-# Native finish — UNI Atlas
+# UNI Atlas — cloud finish and native handoff
 
-Continue **`codex/uni-study-mode-2026-10-10`** in an isolated Human Atlas checkout. The cloud implementation owns the importer, UI, renderer integration, routes and tests. Native workers perform only the deployment and device steps below; preserve existing work, keep SpaceO's sync hold, and merge neither `main`.
+Continue [PR #1](https://github.com/Xon333/human-atlas/pull/1) on `codex/uni-study-mode-2026-10-10`; fetch the latest head and preserve later changes. Do not restart from main or open a competing implementation. [SpaceO's continuation](https://github.com/Xon333/SpaceO/blob/codex/uni-course-integration-2026-10-10/.spaceo/uni/CONTINUE.md) owns cross-repository coordination and the private acceptance record. This file owns remaining Atlas work; [course-runtime.md](course-runtime.md) owns configuration and route syntax.
 
-**Preference / cloud follow-up:** A near-black **dark mode with high-contrast readable controls** is preferred, but this branch currently remains light (`app/globals.css` uses `color-scheme: light`). The Atlas **cloud** owner, not a native deployment worker, owns any theme implementation using existing components; do not substitute Obsidian CSS hacks or change renderer architecture. Native workers verify appearance, accessibility and source-image fidelity in Safari, desktop Obsidian Web viewer and on a real phone, and report the light-theme gap if it remains. This preference need not block the working private rollout.
+## Cloud finish
 
-For the cross-repository rollout and verification record, use [SpaceO PR #6's updated continuation](https://github.com/Xon333/SpaceO/blob/codex/uni-course-integration-2026-10-10/.spaceo/uni/CONTINUE.md) as the central handoff; the steps below remain authoritative for Atlas runtime specifics.
+**The Atlas cloud owner implements dark mode in this PR.** At reviewed code commit `39ea4642`, [globals.css](../app/globals.css) forces a light palette and [scene.tsx](../app/scene.tsx) sets a light clear colour, ground and platform. A CSS-only dark shell would leave the stage light.
 
-1. **OMV — provision real private inputs.** Read the current service configuration to find the actual atlas checkout, port/private origin and SpaceO PR #6 checkout. From that complete SpaceO checkout, run its existing exporter against this branch's `public/models/atlas.json`:
+Make the existing application dark by default from first paint: near-black/charcoal UI and stage, legible labels, visible borders/focus/hover/selection states, and consistent portalled menus/dialogs. Cover UNI and the full explorer. Preserve anatomy system colours, source-image pixels, laterality and the distinction between a highlighted target and neutral objective context. No new theme framework, settings service or elaborate theme picker is needed.
 
-   ```sh
-   python3 .spaceo/atlas-course/export.py --catalog /actual/human-atlas/public/models/atlas.json --check
-   python3 .spaceo/atlas-course/export.py --catalog /actual/human-atlas/public/models/atlas.json
-   ```
+**Extend, never reinvent.** Keep the renderer, model pipeline, catalogue identities, GPU batching, picking, camera/explosion interactions and existing components. Adjust stage styling in that renderer; do not replace it, reload models to change appearance, add another viewer, retranslate the atlas corpus or rebuild SpaceO/H5P. The existing schemaVersion 1 consumer and course selections remain the foundation.
 
-   Use the real PDF, figures and captures. Cloud test snapshots with synthetic media are not deployment inputs. Keep the generated file and lecture assets in SpaceO or ignored local storage.
+Complete code, scoped tests, browser/layout checks and documentation here. Run `npm run check`, `npm run build` and relevant existing regression checks after changes. Reuse [validate-browser.mjs](../scripts/validate-browser.mjs) and an available Playwright/Chromium installation; its environment options are in that file. Inspect dark UNI/explorer views, the smallest supported viewport, resized split-pane framing, source controls and no-highlight context. Do not weaken selection/framing assertions to make a theme pass. Private fixtures may live in ignored `.private-course/`, outside public inputs; do not commit them. Record actual limitations rather than treating synthetic media or software rendering as device acceptance.
 
-2. **OMV — connect the existing deployment.** Build this app branch and run `npm run serve:private` under the existing service manager, with `ATLAS_COURSE_FILE`, `ATLAS_SPACEO_ROOT`, the observed `ATLAS_VAULT_NAME`, and the observed origin/port/bind settings from [runtime configuration](course-runtime.md#run-the-existing-app-privately). Retain the existing private network/proxy boundary. Confirm `/api/course` returns the real validated overlay and private sources remain unavailable through the public static deployment.
+Update this section and PR #1 with the finished commit and evidence. Native workers receive only deployment and environment-specific checks. Preparatory native work can proceed now; final visual acceptance uses the completed dark-mode commit. A temporary light deployment does not close this task.
 
-3. **Mac/phone — observe actual behavior.** In Safari and desktop Obsidian Web viewer, open a selection link, an individual mesh of a bilateral concept, and an unmapped objective. Check orbit/zoom/tap, readable controls at the actual pane size, reload/Back, neutral context with no target highlight, the exact note heading, PDF page and figure. Verify the real PDF and pelvic-ligament figure explicitly; their cloud HTTP checks used synthetic files. Check phone access/touch separately where available. Record device observations without repeating cloud research or implementing another UI.
+## OMV deployment
 
-4. **SpaceO owner — record the observed routes once.** Run `npm run course:links -- --origin '<observed-private-origin>' --api 'http://127.0.0.1:<observed-port>'` in the deployed atlas checkout. Add those observed links at the existing anatomy headings assigned in [SpaceO's continuation](https://github.com/Xon333/SpaceO/blob/codex/uni-course-integration-2026-10-10/.spaceo/uni/CONTINUE.md); record native results there and update the app draft PR with only the resulting deployment/device evidence. Keep private paths, source content and runtime configuration out of the public PR.
+Use the existing service manager and private access path. Inspect actual checkout/container paths, Node version, service identity, origin, bind and port. Build the current PR candidate in an isolated checkout with Node 22.13+ and matching dependencies (`npm ci` when needed), retaining the working deployment until candidate checks pass. Do not remove its rollback revision or unrelated service configuration.
 
-Finish when the private deployment, exact source return and actual device checks are observed. Report a concrete environment-only blocker if one remains; do not reopen architecture or redo cloud-executable implementation.
+From the complete, persistent SpaceO PR #6 checkout, export once against the candidate's actual catalogue:
+
+```sh
+python3 .spaceo/atlas-course/export.py --catalog '/observed/atlas-checkout/public/models/atlas.json'
+```
+
+The path is a placeholder to resolve locally. Export already validates before replacing its output; `--check` is only the read-only alternative. Use the real lecture PDF, figures and captures, never the cloud media stand-ins.
+
+Run the built app with `npm run serve:private` under that service manager. Set the observed process environment from [runtime configuration](course-runtime.md#run-the-existing-app-privately), particularly `ATLAS_COURSE_FILE`, `ATLAS_SPACEO_ROOT`, `ATLAS_VAULT_NAME` and the origin/bind/port. These must be paths visible and readable to the actual process/container. A static-only deployment does not serve course APIs. Keep the source checkout available after deployment.
+
+Verify `/api/course` through both the worker-reachable runtime and user-facing private origin. Confirm the real bound PDF, figure and capture routes, PDF byte ranges and denial of an unregistered source. In particular, inspect the real skeleton PDF and pelvic-ligament figure omitted from the cloud media transfer. Preserve the private boundary; do not expose the whole vault or disable guards to fix routing.
+
+Print links from the running candidate:
+
+```sh
+npm run course:links -- --origin '<user-facing-private-origin>' --api '<worker-reachable-runtime-origin>'
+```
+
+Use the app's link button for individual structures/meshes. The printer constructs selection/objective URLs; it does not validate the supplied user-facing origin. The SpaceO owner places and tests links in the existing notes. No live paths, hostnames, course captures or private output belong in this public PR.
+
+## Device acceptance and closeout
+
+After SpaceO's reviewed content is present in the accepted Mac vault, test Safari and desktop Obsidian Web viewer: one selection, one sided mesh, one unmapped objective with neutral context, orbit/zoom/tap, pane resize, reload/Back, readable dark UI/stage, exact note heading, real PDF page and figure. Use a real phone for phone claims when available; missing device access is a recorded limit, not a desktop failure.
+
+Native workers own observed deployment/settings fixes. For a reproducible application bug, return the smallest evidence to the cloud source owner; do not redesign around it or repeat unrelated research. Rerun affected checks after fixes. Record private integration results once in SpaceO's continuation and only a non-sensitive deployment/device summary here. Preserve local work, SpaceO's sync hold and both unmerged main branches.
+
+Baseline verification remains the original PR's reported cloud evidence, not a new run: 58 course checks, 15 runtime/privacy tests and Chromium viewport checks. The 10 October handoff review changed documentation only; dark-mode implementation and native acceptance remain pending.
