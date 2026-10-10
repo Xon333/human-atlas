@@ -2,6 +2,10 @@
 
 Continue **`codex/uni-study-mode-2026-10-10`** in an isolated Human Atlas checkout. The cloud implementation owns the importer, UI, renderer integration, routes and tests. Native workers perform only the deployment and device steps below; preserve existing work, keep SpaceO's sync hold, and merge neither `main`.
 
+**Preference / cloud follow-up:** A near-black **dark mode with high-contrast readable controls** is preferred, but this branch currently remains light (`app/globals.css` uses `color-scheme: light`). The Atlas **cloud** owner, not a native deployment worker, owns any theme implementation using existing components; do not substitute Obsidian CSS hacks or change renderer architecture. Native workers verify appearance, accessibility and source-image fidelity in Safari, desktop Obsidian Web viewer and on a real phone, and report the light-theme gap if it remains. This preference need not block the working private rollout.
+
+For the cross-repository rollout and verification record, use [SpaceO PR #6's updated continuation](https://github.com/Xon333/SpaceO/blob/codex/uni-course-integration-2026-10-10/.spaceo/uni/CONTINUE.md) as the central handoff; the steps below remain authoritative for Atlas runtime specifics.
+
 1. **OMV — provision real private inputs.** Read the current service configuration to find the actual atlas checkout, port/private origin and SpaceO PR #6 checkout. From that complete SpaceO checkout, run its existing exporter against this branch's `public/models/atlas.json`:
 
    ```sh
