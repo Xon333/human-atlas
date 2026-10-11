@@ -94,4 +94,4 @@ The output includes the exact bound note paths/headings and remains private. Do 
 
 Use `.private-course/` for optional local staging, or point directly at the SpaceO export. `.gitignore` and `.dockerignore` exclude private inputs and source assets. Neither the build nor the browser source imports the snapshot. Vite's build guard checks public assets, client import boundaries and output even when Vite is invoked directly. A private file copied into `public/`, a client source tree or a generated public asset fails the build. Adding a genuinely public data/media asset requires a deliberate reviewed allowlist change.
 
-The default Vercel/static build remains the public explorer. Software MIT and BodyParts3D attribution are preserved independently of private teaching-material rights.
+The default Vercel/static build opens the public region chooser; complete-body Explorer is explicit. Software MIT and BodyParts3D attribution are preserved independently of private teaching-material rights.

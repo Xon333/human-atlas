@@ -26,7 +26,7 @@ Repacking changes the exact `public/models/atlas.json` Git blob because chunk de
 git hash-object public/models/atlas.json
 ```
 
-For this branch, the new blob is `0e22085db177ba8089d1a168135aea8524846152`; it replaces accepted `0f81b5621479a0c0548f4683c316f33bd4d6545b`. Set `catalog.ref` to the commit produced by cloud integration, not an earlier serving commit. Both changes belong in SpaceO's existing authored course input and regenerated private export. No SpaceO schema extension or target remapping is required.
+For this branch, the new blob is `0e22085db177ba8089d1a168135aea8524846152`; it replaces accepted `0f81b5621479a0c0548f4683c316f33bd4d6545b`. The authorized native release uses `catalog.ref: c2c8d344eb21ca7a719a78a16a574d1c3ea29bb9`. Cloud integration can subsequently pin its final integrated commit, provided that commit contains the same catalogue bytes. Both changes belong in SpaceO's existing authored course input and regenerated private export. No SpaceO schema extension or target remapping is required.
 
 Keep `catalog.path`, catalogue version, all seven selection IDs, authored target order, source bindings, evidence and Slovenian/Latin terminology unchanged. Regenerate the private export using SpaceO's existing exporter. Do not weaken its exact catalogue check or overwrite the currently served export as preparation.
 
@@ -41,9 +41,9 @@ Public region definitions are independent of the syllabus. The accepted course r
 
 ## Controlled native cutover
 
-The accepted deployment remains active. Preparation and integration do not authorize switching it.
+The regional release was activated with explicit authorization on 11 October 2026. Its exact build/export identities, serving evidence and rollback commands are in [the deployment record](REGIONAL-DEPLOYMENT.md). Future preparation or integration alone does not authorize another service switch.
 
-1. The cloud owner integrates this branch into existing PR #1, runs affected CI and produces a private export pinned to the integrated catalogue. Retain the accepted release and its matching export for rollback.
+1. Select an exact reviewed Atlas commit and obtain its matching private export from the SpaceO owner. The native cutover can precede final cloud integration when explicitly authorized; it does not merge PR #1. Retain the accepted release and its matching export for rollback.
 2. Build the exact integrated commit in an isolated OMV checkout using the existing Node runtime and lockfile. Run heavy checks through `/home/t3code/.local/bin/t3-check -- COMMAND`. Stage the build and runtime source as a new immutable release, with its candidate export outside public/dist. Do not reuse the old release's identity manifest or activation script for a new artifact.
 3. Start the candidate runtime on an unused loopback port. Check its served catalogue blob, `/api/course`, one exact source return and a regional link. Keep the current service, nginx routes, H5P, source files and sync holds unchanged.
 4. After a controlled cutover is authorized, the native owner switches the existing runtime's **WorkingDirectory and candidate `ATLAS_COURSE_FILE` together** in one candidate-specific drop-in, preserving the accepted environment and limits. A WorkingDirectory-only change would leave the course pinned to the old catalogue. Retain the established readiness gate and restart the existing runtime/proxy in their established order.
