@@ -1,4 +1,5 @@
 import type { Atlas, View } from './anatomy';
+import {CAMERA_VIEWS} from './camera-views.ts';
 import type { CourseOverlay } from './course';
 import {atlasRegions, regionForElements} from './atlas-regions.ts';
 import { encodeCourseText, spaceoRoute, validateSpaceOPath } from './course.ts';
@@ -34,7 +35,7 @@ function nonempty(value: string, label: string): string {
   requireLink(value.trim().length > 0 && !/[\u0000-\u001f\u007f]/u.test(value), `${label}: invalid value`);
   return value;
 }
-const VIEWS = ['three-quarter', 'front', 'back', 'side'];
+const VIEWS = Object.keys(CAMERA_VIEWS);
 function validateLink(link: AtlasLink): void {
   requireLink(['course', 'region', 'explorer'].includes(link.mode), 'Unknown atlas view');
   for (const field of ['courseId', 'regionId', 'selectionId', 'structureId', 'meshId', 'objectiveId'] as const) if (link[field] !== undefined) nonempty(link[field], field);
