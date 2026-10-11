@@ -197,7 +197,7 @@ export async function checkRegionFirst({page, base, output = path.join(root, '.p
       record('Hand opens from chooser UI as an unselected assembly', handBoth);
 
       phase = 'hand-side';
-      await page.locator('.bottom-dock').getByRole('group', {name: 'Body side'}).getByRole('button', {name: 'Right', exact: true}).click();
+      await page.locator('.bottom-dock').getByRole('combobox', {name: 'Body side'}).selectOption('right');
       await page.waitForFunction(() => new URLSearchParams(location.hash.slice(1)).get('side') === 'right', null, {timeout});
       await ready(); await checkAssembly();
       const handRight = await live('Right hand');

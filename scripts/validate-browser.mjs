@@ -326,7 +326,7 @@ const resourceChecks = async atlas => {
   const centerFrame = () => page.screenshot({clip: {x: 500, y: 210, width: 430, height: 530}});
   const moves = async (name, action) => {const before = await centerFrame(); await advances(name, action); await quiet(`${name}-idle`); assert.ok(!before.equals(await centerFrame()), `${name} must change the rendered anatomy`);};
   await state('data-mode', 'explorer'); await quiet('default-idle');
-  const full = await advances('default-camera', () => page.getByRole('button', {name: 'front view', exact: true}).click());
+  const full = await advances('default-camera', () => page.getByRole('combobox', {name: 'Perspective', exact: true}).selectOption('front'));
   await quiet('default-camera-idle');
   await advances('skeleton-change', () => page.getByRole('button', {name: 'Skeleton', exact: true}).click());
   await quiet('skeleton-idle');
@@ -342,7 +342,7 @@ const resourceChecks = async atlas => {
     await advances(`${name}-resume`, () => page.locator('.scene').evaluate((element, property) => {element.style[property] = '';}, property));
   }
   await page.getByRole('button', {name: 'Pause rotation', exact: true}).click(); await quiet('rotation-stopped');
-  await moves('camera-change', () => page.getByRole('button', {name: 'side view', exact: true}).click());
+  await moves('camera-change', () => page.getByRole('combobox', {name: 'Perspective', exact: true}).selectOption('side'));
   await moves('orbit', async () => {await page.mouse.move(780, 440); await page.mouse.down(); await page.mouse.move(860, 470, {steps: 8}); await page.mouse.up();});
   await moves('zoom', async () => {await page.mouse.move(740, 430); await page.mouse.wheel(0, -180);});
   await moves('explode', async () => {await page.getByRole('slider').focus(); await page.getByRole('slider').press('End');});
@@ -395,18 +395,18 @@ const explorerChecks = async atlas => {
   await page.getByRole('button', {name: 'Isolate structure', exact: true}).click();
   await page.getByRole('button', {name: 'Show surrounding anatomy', exact: true}).waitFor();
   await page.getByRole('button', {name: 'Clear selection', exact: true}).click();
-  await page.getByRole('button', {name: 'back view', exact: true}).click();
+  await page.getByRole('combobox', {name: 'Perspective', exact: true}).selectOption('back');
   await openSearch(heart.name);
   await page.getByRole('option').first().click();
   await state('data-selected-count', heart.elements.length);
   assert.equal(params().get('view'), 'back', 'An ordinary explorer selection must preserve the camera view');
-  assert.equal(await page.getByRole('button', {name: 'back view', exact: true}).getAttribute('aria-pressed'), 'true');
+  assert.equal(await page.getByRole('combobox', {name: 'Perspective', exact: true}).inputValue(), 'back');
   await page.getByRole('button', {name: 'Clear selection', exact: true}).click();
   await page.getByRole('button', {name: 'Skeleton', exact: true}).click();
   await page.getByRole('slider').focus();
   await page.getByRole('slider').press('End');
   await page.waitForFunction(() => document.querySelector('.explode-control input[type=range]')?.value === '100');
-  assert.ok(await page.getByRole('button', {name: 'back view', exact: true}).isDisabled());
+  assert.ok(await page.locator('select[aria-label=Perspective] option[value=back]').isDisabled());
   const femur = atlas.concepts.find(concept => concept.name.toLowerCase() === 'femur');
   assert.ok(femur, 'The explorer reference contains the original femur concept');
   await openSearch(femur.name);
