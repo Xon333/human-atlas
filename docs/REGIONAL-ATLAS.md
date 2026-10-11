@@ -14,7 +14,7 @@ There is no application geometry cache, service worker or background prefetch. N
 
 ## Selection
 
-A selected structure receives an amber highlight while the surrounding assembly becomes a cooler neutral colour. Selection does not isolate automatically. Isolation, rotation, views and Explorer's exploded layout remain explicit controls. Bone and muscle filters reuse the catalogue's anatomical classes; source names and identifiers remain searchable.
+A selected structure receives an amber highlight while the surrounding assembly becomes a cooler neutral colour. Selection does not isolate automatically. Isolation, rotation, views and Explorer's exploded layout remain explicit controls. The Perspective selector names the existing cameras Oblique, Anterior, Lateral and Posterior; Body side separately filters anatomy. Existing `three-quarter`, `front`, `side` and `back` link values remain compatible. These are orientation presets, not anatomical sections. Bone and muscle filters reuse the catalogue's anatomical classes; source names and identifiers remain searchable.
 
 Public regions use `#region=<id>`, optionally followed by `side=right|left|both`, `layer=bones|muscles|all`, `structure=<catalogue-id>`, `mesh=<mesh-id>`, `view=front|back|side|three-quarter` and `isolate=0|1`. `#explorer=1` is the explicit complete-body route. Existing course links retain their syntax and meanings; see [the runtime contract](course-runtime.md).
 

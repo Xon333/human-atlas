@@ -30,7 +30,7 @@ export function RegionChooser({regions, course, loading, error, pending, courseS
   return <main className="region-home" data-mode="chooser">
     <header className="home-header"><span className="brand">Human Atlas <small>3D</small></span><span>BodyParts3D</span></header>
     <div className="home-content">
-      <div className="home-intro"><span className="eyebrow">ANATOMY AT YOUR SCALE</span><h1>Choose a region.</h1><p>Explore the assembly. Select a structure to see where it belongs.</p></div>
+      <div className="home-intro"><h1>Choose a region</h1></div>
       {error && <div className="route-notice" role="alert"><strong>This view could not be opened.</strong><span>{error}</span></div>}
       {pending&&<p className="catalogue-status" role="status">Resolving this view…</p>}
       {loading ? <p className="catalogue-status" role="status">Loading anatomy catalogue…</p> : <>
@@ -40,7 +40,7 @@ export function RegionChooser({regions, course, loading, error, pending, courseS
       </>}
       {course && <section className="home-course" lang="sl"><div><BookOpen size={16}/><h2>UNI · Fizioterapija</h2><span>{course.selections.length} izborov</span></div><nav aria-label="Študijski izbori">{course.selections.map(selection=><a key={selection.id} href={serializeAtlasLink({mode:'course',courseId:course.courseId,selectionId:selection.id})} onClick={event=>{event.preventDefault();onNavigate({mode:'course',courseId:course.courseId,selectionId:selection.id});}}>{selection.region?.label??selection.label}<ChevronRight size={14}/></a>)}</nav></section>}
       {courseStatus==='error' && <p className="catalogue-status" role="status">UNI gradiva ni bilo mogoče preveriti. <button onClick={()=>location.reload()}>Ponovno naloži</button></p>}
-      <div className="explorer-entry"><div><strong>Full Body Explorer</strong><span>Every system, with layers and exploded views.</span></div><a href="#explorer=1" onClick={event=>{event.preventDefault();onNavigate({mode:'explorer'});}}>Open explorer <ArrowRight size={16}/></a></div>
+      <div className="explorer-entry"><div><strong>Full Body Explorer</strong><span>All regions and systems.</span></div><a href="#explorer=1" onClick={event=>{event.preventDefault();onNavigate({mode:'explorer'});}}>Open explorer <ArrowRight size={16}/></a></div>
     </div>
     <footer className="home-footer">Adult male reference · BodyParts3D / DBCLS · CC BY 4.0</footer>
   </main>;

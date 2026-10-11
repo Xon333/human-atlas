@@ -4,8 +4,8 @@
 :root {
   font-family: Inter, 'Helvetica Neue', Arial, sans-serif;
   color: var(--foreground); background: var(--background); color-scheme: dark;
-  --background: #0c0e11; --foreground: #eaecf0;
-  --surface: #15171b; --surface-strong: #202329; --surface-inset: #101216; --glass: #15171bf5;
+  --background: #080c13; --foreground: #f0f2f5;
+  --surface: #15171b; --surface-strong: #202329; --surface-inset: #101216; --glass: #121820f5;
   --card: var(--surface); --card-foreground: var(--foreground); --popover: var(--surface-strong); --popover-foreground: var(--foreground);
   --primary: #dbe4f0; --primary-hover: #fff; --primary-foreground: #15171b;
   --secondary: #292d34; --secondary-foreground: var(--foreground); --muted: #252930; --muted-foreground: #a4aab4;
@@ -13,7 +13,7 @@
   --selection-background: #2b323e; --selection-hover: #343d4c; --selection-foreground: #f4f6fa; --selection-border: #b7c9e5; --term-colour: #c1c8d4;
   --evidence-background: #27231d; --evidence-hover: #332c22; --evidence-foreground: #dfc398; --evidence-border: #625139;
   --bonus-background: #272330; --bonus-foreground: #cbbddd; --bonus-border: #655773;
-  --destructive: #efa39b; --border: #30343c; --input: #505762; --ring: #bfd3ef; --radius: .375rem;
+  --destructive: #efa39b; --border: #2c3542; --input: #505762; --ring: #bfd3ef; --radius: .375rem;
 }
 @theme inline {
   --color-background: var(--background); --color-foreground: var(--foreground); --color-card: var(--card); --color-card-foreground: var(--card-foreground);
@@ -41,8 +41,8 @@ button svg, a svg { flex-shrink: 0; }
 .studio { height: 100dvh; min-height: 320px; width: 100%; position: relative; isolation: isolate; }
 .scene { position: absolute; inset: 0; }
 .scene canvas { display: block; width: 100%; height: 100%; touch-action: none; }
-.vignette { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse at 50% 45%, transparent 42%, #0003); }
-.studio-header { position: absolute; top: 0; inset-inline: 0; height: 64px; display: flex; align-items: center; gap: 16px; padding: 0 24px; background: linear-gradient(var(--background), #0c0e11d9); border-bottom: 1px solid #ffffff0a; z-index: 5; }
+.vignette { position: absolute; inset: 0; pointer-events: none; background: none; }
+.studio-header { position: absolute; top: 0; inset-inline: 0; height: 64px; display: flex; align-items: center; gap: 16px; padding: 0 24px; background: linear-gradient(var(--background), #080c13e6); border-bottom: 1px solid #ffffff0a; z-index: 5; }
 .studio-header .brand { padding: 0; height: 40px; }
 .header-divider { width: 1px; height: 18px; background: var(--border); }
 .current-view { color: var(--muted-foreground); font-size: 12px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -52,7 +52,7 @@ button svg, a svg { flex-shrink: 0; }
 .scene-state { position: absolute; left: 24px; right: 24px; top: 78px; display: flex; flex-wrap: wrap; align-items: center; gap: 7px; font-size: 11px; color: var(--muted-foreground); pointer-events: none; }
 .scene-state>span:first-child { color: var(--foreground); }
 .scene-state i { width: 3px; height: 3px; border-radius: 50%; background: var(--input); }
-.scene-state strong { color: var(--foreground); font-weight: 500; max-width: min(500px, 100%); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scene-state strong { color: #ffd28a; font-weight: 600; max-width: min(500px, 100%); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .selection-notice { position: absolute; left: 50%; top: 114px; transform: translateX(-50%); z-index: 6; display: flex; gap: 10px; align-items: center; width: min(460px, calc(100% - 32px)); font-size: 12px; padding: 10px 14px; background: var(--surface-strong); border: 1px solid var(--input); border-radius: 6px; }
 .panel-heading { display: flex; align-items: center; justify-content: space-between; min-height: 30px; font-size: 12px; font-weight: 600; }
 .panel-heading>span { display: flex; gap: 7px; align-items: center; }
@@ -70,9 +70,12 @@ button[aria-pressed=true], button.active { background: var(--selection-backgroun
 .system-row [data-slot=switch] { transform: scale(.8); transform-origin: right; }
 .panel-foot { display: flex; justify-content: space-between; align-items: center; min-height: 42px; border-top: 1px solid var(--border); margin-top: auto; color: var(--muted-foreground); font-size: 10px; }
 .panel-foot button { font-size: 10px; padding: 4px; }
-.view-controls { position: absolute; right: 20px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; padding: 3px; gap: 2px; }
+.view-controls { position: absolute; left: 24px; top: 112px; display: flex; align-items: center; padding: 5px; gap: 3px; }
+.view-select { display: flex; flex-direction: column; min-width: 112px; padding-left: 5px; }
+.view-select>span { color: var(--muted-foreground); font-size: 10px; padding-left: 4px; }
+.view-select select { color: var(--foreground); background: var(--surface-inset); border: 0; border-radius: 4px; min-height: 32px; padding: 3px 6px; font-size: 12px; cursor: pointer; }
 .view-controls button { width: 36px; height: 36px; padding: 0; color: var(--muted-foreground); font-size: 11px; }
-.view-controls i { height: 1px; background: var(--border); margin: 4px; }
+.view-controls i { width: 1px; height: 28px; background: var(--border); margin: 4px; }
 .bottom-dock { position: absolute; bottom: 44px; left: 50%; transform: translateX(-50%); display: flex; gap: 12px; align-items: center; padding: 8px 12px; width: max-content; max-width: calc(100% - 40px); min-width: 340px; }
 .bottom-dock button { min-height: 36px; font-size: 11px; }
 .explode-control { min-width: 120px; width: 160px; flex: 1; }
@@ -136,7 +139,7 @@ body:has(.detail-sheet) [data-slot=sheet-overlay] { display: none; }
   .header-divider, .current-view, .top-actions span, .top-actions kbd { display: none; }
   .top-actions { gap: 0; } .top-actions button { width: 44px; min-height: 44px; padding: 0; }
   .scene-state { top: 68px; inset-inline: 14px; font-size: 10px; row-gap: 4px; }
-  .view-controls { right: 10px; padding: 2px; } .view-controls button { width: 36px; height: 44px; }
+  .view-controls { left: 14px; top: 110px; padding: 4px; } .view-select select { min-height: 40px; } .view-controls button { width: 36px; height: 44px; }
   .bottom-dock { left: 10px; right: 10px; bottom: calc(12px + env(safe-area-inset-bottom)); transform: none; width: auto; max-width: none; min-width: 0; padding: 6px 8px; gap: 7px; }
   .bottom-dock button { min-height: 44px; }
   .bottom-dock .scene-link-control>button { font-size: 0; gap: 0; width: 36px; padding: 0; }
