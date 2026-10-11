@@ -23,7 +23,7 @@ The regional list preserves authored Slovenian/Latin/English terms and their lea
 
 Objectives without verified model geometry are identified in their original sources. Their optional context view shows surrounding anatomy in its normal material, with **no target highlight**. Course data stays in SpaceO or ignored local runtime inputs; it is never part of the public static build.
 
-See [runtime configuration and scene links](docs/course-runtime.md). The implementation's remaining Mac/OMV work is bounded by [the native handoff](docs/NATIVE.md).
+See [runtime configuration and scene links](docs/course-runtime.md) and [integration and native state](docs/NATIVE.md). Existing native acceptance remains valid for its recorded source; a repository merge does not itself deploy a build or synchronize the Mac vault.
 
 ## Run locally
 
@@ -49,7 +49,7 @@ npm run test:runtime
 npm run build
 ```
 
-Validation covers exact geometry and bounded raycasts across shared buffers, GPU-frame fallback and cleanup, visible animation timing, nonoverlapping exploded layouts, search and inspection contracts, and tap-versus-drag handling. Browser checks exercise desktop and narrow/mobile layouts, contextual selection, system controls, search, explicit isolation, orbit, zoom, rotation and exploded-inventory Reset. Physical-device integration and resource measurements belong to the existing native acceptance record in [the handoff](docs/NATIVE.md).
+Validation covers exact geometry and bounded raycasts across shared buffers, GPU-frame fallback and cleanup, visible animation timing, nonoverlapping exploded layouts, search and inspection contracts, and tap-versus-drag handling. Browser checks exercise desktop and narrow/mobile layouts, contextual selection, system controls, search, explicit isolation, orbit, zoom, rotation and exploded-inventory Reset. Run checks affected by the change and reuse the [recorded native acceptance](docs/NATIVE.md); no further memory comparison is scheduled.
 
 Course checks cover catalogue-byte identity, authored versus regional mesh membership, multilingual/source contracts, unmapped-objective separation, side/layer links and legacy routes, private runtime boundaries, and accidental inclusion of local course files in public builds. Repeatable source tests use public synthetic fixtures and the public anatomy catalogue. The optional [browser checker](scripts/validate-browser.mjs) reuses a locally available Playwright/Chromium installation and reads any course overlay from the private runtime; its reports stay in ignored local storage. With that environment configured, `ATLAS_TEST_SCOPE=regional ATLAS_TEST_REQUIRE_COURSE=1 npm run test:browser` checks a real regional export, `ATLAS_TEST_SCOPE=dark` checks the interface and portals, and `ATLAS_TEST_SCOPE=resource` checks idle/hidden work, GPU scheduling and full-inventory Reset. The default scope retains the complete interaction suite. Software-rendered cloud results do not establish device FPS, battery use or process memory.
 

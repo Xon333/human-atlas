@@ -1,39 +1,33 @@
-# Consolidated Atlas integration
+# Atlas integration and native state
 
-[PR #1](https://github.com/Xon333/human-atlas/pull/1) is the integration candidate for the regional study UI and the reviewed [resource PR #2](https://github.com/Xon333/human-atlas/pull/2). Both histories are preserved. The resource change no longer has a separate deployment or native tracker.
+[Human Atlas PR #1](https://github.com/Xon333/human-atlas/pull/1) contains the accepted regional UI, resource changes and regional-allocation follow-up. [SpaceO integration](https://github.com/Xon333/SpaceO/blob/codex/uni-course-integration-2026-10-10/.spaceo/INTEGRATION.md) owns the current cross-repository revision pair, published native returns and exact merge order. Otis approves the PR merges; automatic Mac vault sync remains held separately.
 
-## One native execution
+## Recorded state — 11 October 2026
 
-**Start and finish in [SpaceO's existing UNI continuation](https://github.com/Xon333/SpaceO/blob/codex/uni-course-integration-2026-10-10/.spaceo/uni/CONTINUE.md).** It contains the reviewed revision pair, exact OMV preparation/deployment and rollback instructions, one Mac acceptance pass, and the original accepted native evidence. An OMV integration owner may use a Mac child for actual Obsidian/device work. Keep both PRs draft/unmerged and the existing sync hold paused.
+| Layer | Accepted evidence |
+| --- | --- |
+| Repository source before this documentation pass | `5224668f050b8049d0894eb3ee673d3f814ed1bc`; includes all published regional/resource/system-memory branch work |
+| Private native deployment | `b45f4fe421cd10121c70e2ed304db40afe50f1d5`, retained after activation, rollback and reapplication |
+| Source/deployment relationship | The difference from `5224668` is a validation script; application, runtime and model assets are source-equivalent |
+| Native functionality | Regional/side/layer transitions, neutral context, picking/highlighting, search, full Explorer, explode/reset and guest/process disposal passed within the recorded native scope |
+| Separate static reading derivative | Codex Work's accepted preview used this unchanged renderer and exact regional/mesh link; no Atlas deployment followed from that capture |
 
-The accepted private deployment, course notes, source returns, H5P playback, PDF++ capture and editable drawing already exist. Their dated acceptance remains in that continuation. Native execution applies the consolidated candidate and verifies changed behavior in the actual environment; it does not repeat initial installation, content adoption, source research or cloud tests.
+These are dated observations, not live health checks. A new source commit, a PR merge and an installed deployment are separate events. Documentation/CI changes do not require repeating the accepted installation or changing its recovery point.
 
-## Cloud implementation
+## Ownership and source compatibility
 
-- Regions open as neutral, coherent anatomy using the existing detailed model, materials and picker. Choosing a list item or mesh highlights it in place, retains the regional list and camera, and keeps isolation an explicit action.
-- Optional regional context extends the existing course schema. Original teaching targets, terminology, source bindings and unmapped objectives retain their meaning. Extra catalogue structures are identified as source names without claiming they are teaching requirements.
-- Deep links, side/layer filters, multilingual search, clipboard fallback, browser history, narrow panes and the complete explorer share the original scene and navigation.
-- Rendering and picking share geometry arrays. Idle/hidden views stop animation work, hidden batches are skipped, and a nonblocking WebGL2 fence limits queued GPU frames. Visible elapsed time controls transitions without accumulating hidden time. Context loss/unmount clean up pending work and owned resources.
+The native Atlas owner owns renderer/UI/runtime implementation. The cloud owner integrates published source into this PR and coordinates the producer/consumer pair. SpaceO owns authored terms, source evidence, note structure and portable retrieval; its Mac Obsidian owner owns installed plugins and native navigation.
 
-The timeout investigation and measured resource changes are recorded in [RESOURCE-CONSUMPTION.md](RESOURCE-CONSUMPTION.md). Configuration, schema and URL syntax remain in [course-runtime.md](course-runtime.md).
+Use [course-runtime.md](course-runtime.md) for schema, source routes and URL contracts. Keep the existing catalogue bytes and IDs, authored teaching order, source bindings, contextual highlighting and explicit isolation. The optional regional fields remain compatible with `schemaVersion: 1`. Codex Work's [preview adapter](https://github.com/Xon333/codex-work/blob/codex/native-memory-offload-2026-10-11/ops/mac-memory-offload/preview.mjs) imports the existing `serializeAtlasLink` and `resolveAtlasLink` functions and reads `scopeElements`; it does not own another renderer or course source.
 
-## Reproducible verification
+## Recorded limits
 
-Use Node 22.13+ and the existing lockfile. Reuse matching dependencies and installed Playwright/Chromium. `PLAYWRIGHT_MODULE` and `CHROMIUM_EXECUTABLE` can point to those tools; no browser dependency is added to the application.
+Core Web viewer did not navigate the tested custom-scheme note links and showed the remote PDF as a blank view. Its existing **Open in default browser** action provides the accepted Safari-to-local-source handoff. One immediate reload/Back failure recovered through built-in Reload viewer; the cause was not established. Actual phone checks, H5P editor import and remote-browser PDF rendering remain outside the accepted scope.
 
-```sh
-npm run check
-npm run test:course
-npm run test:runtime
-npm run test:geometry
-npm run test:scene
-node scripts/validate-atlas.mjs
-node scripts/validate-interactions.mjs
-npm run build
-ATLAS_TEST_SCOPE=all ATLAS_TEST_REQUIRE_COURSE=1 npm run test:browser
-ATLAS_TEST_SCOPE=resource npm run test:browser
-```
+Initial route resolution can begin loading all 2,234 parts before selecting the regional scene. Array/allocation reductions and the native screening observations do not establish a causal total-Mac, energy or post-close saving. Scripted memory comparisons are cancelled; they are not a merge condition. The retired SpaceO memory profile and Excalidraw instructions must not be reapplied by following older receipts.
 
-The `all` scope uses the real private regional export configured through `ATLAS_COURSE_FILE` and `ATLAS_SPACEO_ROOT`; it covers regional interactions, dark UI/source controls, responsive geometry and the original complete explorer sequence. `resource` adds deterministic idle, suspension, direct animated Reset, picking and context-loss regressions. `ATLAS_SOFTWARE_GL=1` enables the cloud software renderer only. Screenshots wait for the actual demand renderer to settle and retain a 60-second capture deadline.
+## Checks and recovery
 
-The private SpaceO workflow validates both repositories together, including its exporter/consumer and helper DOM tests. It retains browser evidence privately. The public workflow contains no private course snapshots, teaching assets or deployment configuration. Cloud browser results do not assert native Safari, Obsidian, device FPS, energy or total process memory.
+Use Node 22.13+ and the lockfile. The [existing workflow](../.github/workflows/regional-review.yml) covers typecheck, course/runtime/privacy, geometry, scene scheduling/scope and build checks for affected source. The private paired SpaceO workflow owns real exporter/consumer compatibility. Reuse the existing passing native evidence; repeat a functional check only when a relevant implementation change creates a concrete new risk.
+
+The [rendering review](RESOURCE-CONSUMPTION.md) retains resolved source findings. [Private native evidence and recovery](https://github.com/Xon333/SpaceO/blob/codex/uni-course-integration-2026-10-10/.spaceo/resource-consumption/NATIVE.md) retain deployment receipts, rollback and original source-return qualifications. They are historical evidence, not instructions to restart a benchmark, reinstall plugins or create a new coordinator. Any completed native successor is integrated through the shared integration record before merge approval.

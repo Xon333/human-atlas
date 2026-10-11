@@ -4,7 +4,9 @@ UNI extends the existing React/Vite atlas. `AnatomyScene`, the BodyParts3D catal
 
 ## Source of truth
 
-The producer is SpaceO's [course contract](https://github.com/Xon333/SpaceO/blob/codex/uni-regional-review-2026-10-10/Notes/Codex/Sources/UNI/anatomy/human-atlas/README.md) and [exporter](https://github.com/Xon333/SpaceO/blob/codex/uni-regional-review-2026-10-10/.spaceo/atlas-course/export.py). Human Atlas consumes its **generated snapshot**, not the authored `terms` input. Content, evidence and future lectures remain owned by SpaceO. [The native handoff](NATIVE.md) identifies the exact paired revisions for deployment.
+The producer is SpaceO's [course contract](https://github.com/Xon333/SpaceO/blob/codex/uni-course-integration-2026-10-10/Notes/Codex/Sources/UNI/anatomy/human-atlas/README.md) and [exporter](https://github.com/Xon333/SpaceO/blob/codex/uni-course-integration-2026-10-10/.spaceo/atlas-course/export.py). Human Atlas consumes its **generated snapshot**, not the authored `terms` input. Content, evidence and future lectures remain owned by SpaceO. [The shared integration record](https://github.com/Xon333/SpaceO/blob/codex/uni-course-integration-2026-10-10/.spaceo/INTEGRATION.md) owns the current revision pair and merge order; [native state](NATIVE.md) records what is actually deployed.
+
+Portable hubs may link to existing course notes without changing these bindings. Moving a bound note or changing its heading requires updating the authored binding, regenerating the snapshot and running the existing paired exporter/consumer check in the same change. Navigation aliases do not replace exact source paths or PDF page evidence.
 
 The consumer checks `schemaVersion: 1`, `courseId: "spaceo-uni-anatomija"`, the private flag, source routes, evidence categories, original English names, ordered concept membership and derived mesh selections. Both the snapshot and the actual served catalogue must match the exact Git blob pin. Identifiers retain their catalogue namespace; no TA2 equivalence is inferred. An unmapped objective cannot contain concept or mesh IDs. A context selection cannot become its highlight.
 
