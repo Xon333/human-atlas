@@ -1,7 +1,7 @@
 name: Atlas integration validation
 on:
   push:
-    branches: [codex/uni-regional-review-2026-10-10, codex/uni-study-mode-2026-10-10]
+    branches: [codex/uni-regional-review-2026-10-10, codex/uni-study-mode-2026-10-10, codex/system-memory-audit-2026-10-10]
     paths: ['app/**', 'scripts/**', 'server/**', 'web/**', 'package*.json', '.github/workflows/regional-review.yml']
 permissions:
   contents: read
@@ -24,6 +24,7 @@ jobs:
           npm run test:runtime
           npm run test:geometry
           npm run test:scene
+          node --experimental-strip-types --test scripts/scene-scope.test.mjs
           node scripts/validate-atlas.mjs
           node scripts/validate-interactions.mjs
           npm run build
