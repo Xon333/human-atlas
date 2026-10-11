@@ -1,5 +1,7 @@
 # Consolidated Atlas integration
 
+The region-first successor is documented in [REGIONAL-ATLAS.md](REGIONAL-ATLAS.md). Use its coordinated catalogue/export cutover procedure for the new partition. The acceptance and resource records below describe the earlier consolidated release; they are not a requirement to repeat benchmarks.
+
 [PR #1](https://github.com/Xon333/human-atlas/pull/1) is the integration candidate for the regional study UI and the reviewed [resource PR #2](https://github.com/Xon333/human-atlas/pull/2). Both histories are preserved. The resource change no longer has a separate deployment or native tracker.
 
 ## One native execution

@@ -1,10 +1,12 @@
 import type { Atlas, View } from './anatomy';
 import type { CourseOverlay } from './course';
+import {atlasRegions, regionForElements} from './atlas-regions.ts';
 import { encodeCourseText, spaceoRoute, validateSpaceOPath } from './course.ts';
 import {regionElements, partSide, hasSourceSideConflict, type StudySide, type StudyLayer} from './study-region.ts';
 
 export interface AtlasLink {
-  mode: 'course' | 'explorer';
+  mode: 'course' | 'region' | 'explorer';
+  regionId?: string;
   courseId?: string;
   selectionId?: string;
   structureId?: string;
@@ -34,10 +36,11 @@ function nonempty(value: string, label: string): string {
 }
 const VIEWS = ['three-quarter', 'front', 'back', 'side'];
 function validateLink(link: AtlasLink): void {
-  requireLink(link.mode === 'course' || link.mode === 'explorer', 'Unknown atlas view');
-  for (const field of ['courseId', 'selectionId', 'structureId', 'meshId', 'objectiveId'] as const) if (link[field] !== undefined) nonempty(link[field], field);
-  if (link.mode === 'course') requireLink(!!link.courseId, 'A course link requires courseId');
-  else requireLink(!link.courseId && !link.selectionId && !link.objectiveId && !link.context && !link.side && !link.layer, 'Explorer links cannot contain course targets');
+  requireLink(['course', 'region', 'explorer'].includes(link.mode), 'Unknown atlas view');
+  for (const field of ['courseId', 'regionId', 'selectionId', 'structureId', 'meshId', 'objectiveId'] as const) if (link[field] !== undefined) nonempty(link[field], field);
+  if (link.mode === 'course') requireLink(!!link.courseId && !link.regionId, 'A course link requires courseId and no public region');
+  else if (link.mode === 'region') requireLink(!!link.regionId && !link.courseId && !link.selectionId && !link.objectiveId && !link.context, 'A region link requires regionId and no course targets');
+  else requireLink(!link.regionId && !link.courseId && !link.selectionId && !link.objectiveId && !link.context && !link.side && !link.layer, 'Explorer links cannot contain course targets');
   if (link.objectiveId) requireLink(!link.selectionId && !link.structureId && !link.meshId, 'An unmapped objective cannot also select a structure');
   requireLink(!link.context || !!link.objectiveId, 'Context is only available for an unmapped objective');
   requireLink(link.context === undefined || typeof link.context === 'boolean', 'Invalid context');
@@ -47,25 +50,25 @@ function validateLink(link: AtlasLink): void {
   requireLink(link.layer === undefined || ['bones','muscles','all'].includes(link.layer), 'Invalid regional layer');
 }
 
-/** Empty hash means use the application default. Invalid links must be shown as errors, not silently retargeted. */
+/** Empty hash opens the lightweight chooser. Invalid links must be shown as errors, not silently retargeted. */
 export function parseAtlasLink(hash: string): AtlasLink | null {
   const value = hash.startsWith('#') ? hash.slice(1) : hash;
   if (!value) return null;
   requireLink(value.length <= 4096, 'Atlas link is too long');
   try { decodeURIComponent(value); } catch { throw new AtlasLinkError('Atlas link has invalid encoding'); }
   const parameters = new URLSearchParams(value);
-  const allowed = new Set(['course', 'explorer', 'selection', 'structure', 'mesh', 'objective', 'context', 'view', 'isolate', 'side', 'layer']);
+  const allowed = new Set(['course', 'region', 'explorer', 'selection', 'structure', 'mesh', 'objective', 'context', 'view', 'isolate', 'side', 'layer']);
   for (const [key, entry] of parameters) {
     requireLink(allowed.has(key), `Unknown atlas link field ${key}`);
     requireLink(parameters.getAll(key).length === 1, `Duplicate atlas link field ${key}`);
     nonempty(entry, key);
   }
-  requireLink(!(parameters.has('course') && parameters.has('explorer')), 'A link cannot open course and explorer together');
+  requireLink(['course', 'region', 'explorer'].filter(key => parameters.has(key)).length === 1, 'A link requires exactly one course, region or explorer mode');
   if (parameters.has('explorer')) requireLink(parameters.get('explorer') === '1', 'Invalid explorer mode');
   if (parameters.has('context')) requireLink(parameters.get('context') === '1', 'Invalid context mode');
   if (parameters.has('isolate')) requireLink(['0', '1'].includes(parameters.get('isolate')!), 'Invalid isolate mode');
-  const link: AtlasLink = { mode: parameters.has('course') ? 'course' : 'explorer' };
-  for (const [parameter, field] of [['course', 'courseId'], ['selection', 'selectionId'], ['structure', 'structureId'], ['mesh', 'meshId'], ['objective', 'objectiveId']] as const) {
+  const link: AtlasLink = { mode: parameters.has('course') ? 'course' : parameters.has('region') ? 'region' : 'explorer' };
+  for (const [parameter, field] of [['course', 'courseId'], ['region', 'regionId'], ['selection', 'selectionId'], ['structure', 'structureId'], ['mesh', 'meshId'], ['objective', 'objectiveId']] as const) {
     if (parameters.has(parameter)) link[field] = parameters.get(parameter)!;
   }
   if (parameters.has('side')) link.side = parameters.get('side') as StudySide;
@@ -78,7 +81,7 @@ export function parseAtlasLink(hash: string): AtlasLink | null {
 }
 export function serializeAtlasLink(link: AtlasLink): string {
   validateLink(link);
-  const parameters: [string, string][] = [link.mode === 'course' ? ['course', link.courseId!] : ['explorer', '1']];
+  const parameters: [string, string][] = [link.mode === 'course' ? ['course', link.courseId!] : link.mode === 'region' ? ['region', link.regionId!] : ['explorer', '1']];
   for (const [field, parameter] of [['selectionId', 'selection'], ['structureId', 'structure'], ['meshId', 'mesh'], ['objectiveId', 'objective']] as const) if (link[field]) parameters.push([parameter, link[field]!]);
   if (link.side) parameters.push(['side', link.side]);
   if (link.layer) parameters.push(['layer', link.layer]);
@@ -141,10 +144,76 @@ export function resolveAtlasLink(link: AtlasLink, atlas: Atlas, course: CourseOv
       elements = [...selection.elements];
     }
   }
+  if (link.mode === 'region') {
+    const region = atlasRegions(atlas).find(item => item.id === link.regionId);
+    requireLink(region, `Unknown atlas region ${link.regionId}`);
+    const targetIds = part ? [part.id] : concept?.elements ?? [];
+    requireLink(targetIds.every(id => region.elements.includes(id)), 'This structure does not belong to the linked region');
+    const conflict = hasSourceSideConflict(targetIds);
+    requireLink(!conflict || side === undefined || side === 'both', 'The source side label conflicts with the mesh position; choose both sides to view this structure.');
+    const sides = new Set(atlas.parts.filter(item => targetIds.includes(item.id)).map(partSide).filter(Boolean));
+    side = side ?? (conflict ? 'both' : sides.size === 1 ? [...sides][0] ?? 'both' : 'both');
+    const defaultLayer = regionElements(atlas, region.elements, side, 'bones').length ? 'bones' : 'all';
+    layer = layer ?? defaultLayer;
+    scopeElements = regionElements(atlas, region.elements, side, layer);
+    if (targetIds.length && !targetIds.some(id => scopeElements!.includes(id))) {
+      requireLink(link.layer === undefined, 'The target is outside the selected layer or side');
+      layer = 'all';
+      scopeElements = regionElements(atlas, region.elements, side, layer);
+    }
+    requireLink(scopeElements.length > 0, 'This regional view has no available meshes');
+    if (part) requireLink(scopeElements.includes(part.id), 'This mesh is outside the selected side');
+    if (concept) requireLink(concept.elements.some(id => scopeElements!.includes(id)), 'This structure is outside the selected side');
+  }
   if (concept) elements = [...concept.elements];
   if (part) elements = [part.id];
   if (scopeElements && (concept || part)) elements = elements.filter(id => scopeElements!.includes(id));
   return {...link, ...(selection && link.mode === 'course' ? {selectionId: selection.id} : {}), ...(side ? {side} : {}), ...(layer ? {layer} : {}), elements, ...(scopeElements ? {scopeElements} : {})};
+}
+
+export type AtlasRoute =
+  | {status:'chooser'}
+  | {status:'pending'}
+  | {status:'scene'; request:AtlasLink; resolved:ResolvedAtlasLink};
+
+/** No scene is authorized until its catalogue and (for UNI) verified course are ready. */
+export function resolveAtlasRoute(hash:string, atlas:Atlas|null, course:CourseOverlay|null, courseStatus:'loading'|'ready'|'unavailable'|'error'):AtlasRoute {
+  const request = parseAtlasLink(hash);
+  if (!request) return {status:'chooser'};
+  if (!atlas || (request.mode === 'course' && courseStatus === 'loading')) return {status:'pending'};
+  if (request.mode === 'course' && !request.selectionId && !request.structureId && !request.meshId && !request.objectiveId) {
+    requireLink(course && request.courseId === course.courseId, 'This course is not available in this deployment');
+    requireLink(course.selections.length, 'This course has no available selections');
+    request.selectionId = course.selections[0].id;
+  }
+  return {status:'scene', request, resolved:resolveAtlasLink(request, atlas, course)};
+}
+
+/** A picker target stays in an anatomical assembly, including picks outside the current region. */
+export function publicTargetLink(atlas: Atlas, target: {structureId?: string; meshId?: string}, current?: AtlasLink): AtlasLink {
+  const concept = target.structureId ? atlas.concepts.find(item => item.id === target.structureId) : undefined;
+  if (target.structureId) requireLink(concept, `Unknown atlas structure ${target.structureId}`);
+  if (target.meshId && concept) requireLink(concept.elements.includes(target.meshId), 'This mesh does not belong to the linked structure');
+  const ids = target.meshId ? [target.meshId] : concept?.elements ?? [];
+  requireLink(ids.length && ids.every(id => atlas.parts.some(part => part.id === id)), 'Unknown atlas target');
+  const regions = atlasRegions(atlas);
+  const previous = current?.mode === 'region' ? regions.find(region => region.id === current.regionId) : undefined;
+  const region = previous && ids.every(id => previous.elements.includes(id)) ? previous : regionForElements(atlas, ids);
+  // A source concept spanning several regions has no honest single regional scope.
+  // Keep the current assembly and use a member mesh, or require the explicit Explorer.
+  requireLink(region || current?.mode === 'explorer', 'This structure spans multiple regions. Choose a member structure or open Full Body Explorer.');
+  if (current?.mode === 'explorer') return {mode:'explorer', ...target, isolate:false};
+  const same = previous?.id === region!.id;
+  let side = same ? current?.side : undefined, layer = same ? current?.layer : undefined;
+  if (hasSourceSideConflict(ids)) side = 'both';
+  if (!regionElements(atlas, region!.elements, side ?? 'both', 'all').some(id => ids.includes(id))) {
+    const sides = new Set(atlas.parts.filter(part => ids.includes(part.id)).map(partSide).filter(Boolean));
+    side = sides.size === 1 ? [...sides][0] ?? 'both' : 'both';
+  }
+  if (!regionElements(atlas, region!.elements, side ?? 'both', layer ?? 'bones').some(id => ids.includes(id))) {
+    layer = regionElements(atlas, region!.elements, side ?? 'both', 'muscles').some(id => ids.includes(id)) ? 'muscles' : 'all';
+  }
+  return {mode:'region', regionId:region!.id, ...target, side, layer, isolate:false};
 }
 
 /** `file` includes the exact heading before URI encoding; the path is relative to the observed vault root. */

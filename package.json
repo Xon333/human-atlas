@@ -15,7 +15,10 @@
     "test:course": "node --experimental-strip-types scripts/validate-course.mjs && node --experimental-strip-types --test scripts/study-region.test.mjs",
     "test:geometry": "node --experimental-strip-types --test scripts/model-geometry.test.mjs",
     "test:scene": "node --experimental-strip-types --test scripts/scene-frame.test.mjs",
-    "test:browser": "node --experimental-strip-types scripts/validate-browser.mjs",
+    "test:regions": "node --experimental-strip-types --test scripts/atlas-regions.test.mjs scripts/partition-anatomy.test.mjs scripts/region-navigation.test.mjs",
+    "test:loading": "node --experimental-strip-types --test scripts/model-download.test.mjs scripts/scene-renderer.test.mjs scripts/scene-scope.test.mjs",
+    "test:browser": "node --experimental-strip-types scripts/validate-region-first-browser.mjs",
+    "test:browser:legacy": "node --experimental-strip-types scripts/validate-browser.mjs",
     "course:links": "node --experimental-strip-types scripts/course-links.mjs"
   },
   "dependencies": {

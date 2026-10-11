@@ -6,6 +6,7 @@ import {Sheet, SheetContent, SheetTitle, SheetDescription} from '@/components/ui
 import type {Part, Concept} from './anatomy';
 import {partSide, hasSourceSideConflict, type StudySide, type StudyLayer} from './study-region';
 import type {CourseOverlay, CourseLinks, CourseConcept, CourseSelection, UnmappedObjective, Evidence, Laterality} from './course';
+import {RegionControls} from './region-controls';
 import {obsidianUrl, spaceoSourceUrl} from './course-navigation';
 
 const SIDES: Record<Laterality, string> = {right: 'Desno', left: 'Levo', bilateral: 'Obe strani', midline: 'Sredinska'};
@@ -107,10 +108,7 @@ export function CourseInspector({course, links, selection, term, objective, mesh
       <div className="detail-header">
         <div className="eyebrow">{objective ? 'PREPOZNAVA V VIRU' : 'STRUKTURE V PREDELU'}</div>
         <SheetTitle ref={heading} tabIndex={-1} className="structure-title">{title}</SheetTitle>
-        {!objective && selection?.region && <div className="region-controls">
-          <div className="region-sides" role="group" aria-label="Stran telesa">{(['right','left','both'] as const).map(value => <Button key={value} variant="ghost" aria-pressed={side === value} onClick={() => onRegionView({side:value})}>{value === 'both' ? 'Obe' : SIDES[value]}</Button>)}</div>
-          <label className="region-layer"><span className="sr-only">Plasti predela</span><select aria-label="Plasti predela" value={layer ?? 'bones'} onChange={event => onRegionView({layer:event.target.value as StudyLayer})}><option value="bones">Kosti</option><option value="muscles">Kosti in mišice</option><option value="all">Vse plasti</option></select></label>
-        </div>}
+        {!objective && selection?.region && <RegionControls side={side} layer={layer} onChange={onRegionView} sl/>}
       </div>
       <div className="detail-scroll" key={objective?.id ?? selection?.id}>
         <SheetDescription className="sr-only">{objective ? 'Cilj brez preverjene geometrije. Uporabi izvirni vir.' : 'Izberi ime ali model: struktura se označi v nespremenjenem predelu.'}</SheetDescription>
@@ -122,7 +120,7 @@ export function CourseInspector({course, links, selection, term, objective, mesh
           <SourceLinks course={course} links={links} ids={bindings}/>
         </> : <>
           <div className={`region-selection${pickedSideConflict ? ' source-side-conflict' : ''}`} role="status" aria-live="polite">
-            {pickedName ? <><strong>{pickedName}</strong>{pickedSideConflict ? <span className="picked-side">Neskladna oznaka strani v viru</span> : pickedSide && <span className="picked-side">{SIDES[pickedSide]}</span>}{term?.labels.la && <small lang="la">{term.labels.la}</small>}</> : <span>Izberi ime ali strukturo</span>}
+            {pickedName ? <><strong>{pickedName}</strong>{pickedSideConflict ? <span className="picked-side">Neskladna oznaka strani v viru</span> : pickedSide && <span className="picked-side">{SIDES[pickedSide]}</span>}<small>{isolate ? 'Samo izbrano' : 'Označeno v predelu'}</small>{term?.labels.la && <small lang="la">{term.labels.la}</small>}</> : <span>{scope.size} struktur · sestavljen predel</span>}
           </div>
           <ol className="course-terms" ref={list} aria-label="Strukture v predelu">{rows.map((row,index) => <li key={row.id}>
             <Button variant="ghost" aria-pressed={row.elements.some(id => selected.has(id))} data-mesh={row.part?.id} data-course-term={row.term ? 'true' : 'false'} title={row.term ? `${row.english} · oznaka iz gradiva` : `${row.english} · izvorno ime v atlasu, brez potrjene oznake iz gradiva`} onClick={() => row.term ? onTerm(row.term) : onPart(row.part!.id)}>
