@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtemp,mkdir,writeFile,rm,symlink} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import {checkPublicInputs,checkBundleOutput,privateJson} from './private-build-guard.mjs';
+import {checkPublicInputs,checkBundleOutput,privateJson,approvedPublicFile} from './private-build-guard.mjs';
 import {createCourseFixture} from './course-fixture.mjs';
 
 async function fixture(t) {
@@ -14,6 +14,10 @@ async function fixture(t) {
   await writeFile(path.join(root,'app/page.tsx'),'export default ()=>null;');
   t.after(()=>rm(root,{recursive:true,force:true}));return root;
 }
+test('only reviewed regional geometry filenames enter the public build',()=>{
+  assert.equal(approvedPublicFile('models/region-hand-right-0123456789abcdef.bin.gz'),true);
+  for(const file of ['models/region-course-right-0123456789abcdef.bin','models/region-hand-right-course.pdf','models/region-hand-right-0123456789abcdef.json','models/region-hand-right-current.bin','models/region-hand-right-0123456789abcdef.bin.gz/../course.json']) assert.equal(approvedPublicFile(file),false);
+});
 test('private staging and synthetic server tests remain outside public build inputs',async t=>{
   const root=await fixture(t);const snapshot=JSON.stringify(createCourseFixture().course);
   await writeFile(path.join(root,'.private-course/human-atlas-course.json'),snapshot);

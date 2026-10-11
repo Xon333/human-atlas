@@ -22,7 +22,9 @@ function unsafeName(relative) {
 }
 function fail(relative, reason) { throw new Error(`Public build privacy guard: ${relative}: ${reason}. Keep runtime course inputs in .private-course/ or the SpaceO checkout, outside public/client sources.`); }
 export function approvedPublicFile(relative) {
-  return REVIEWED_PUBLIC_FILES.has(slash(relative)) || /^models\/body-\d+\.bin(?:\.gz)?$/.test(slash(relative));
+  const file = slash(relative);
+  // Exact-byte BodyParts3D partitions; no teaching data or arbitrary named assets.
+  return REVIEWED_PUBLIC_FILES.has(file) || /^models\/body-\d+\.bin(?:\.gz)?$/.test(file) || /^models\/region-(head|neck|thorax|abdomen|pelvis|shoulder|arm|forearm|hand|thigh|leg|foot|body-surface)-(right|left|shared)-[a-f0-9]{16}\.bin(?:\.gz)?$/.test(file);
 }
 export function privateJson(bytes) {
   let value;

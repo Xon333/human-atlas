@@ -8,6 +8,8 @@ The producer is SpaceO's [course contract](https://github.com/Xon333/SpaceO/blob
 
 Portable hubs may link to existing course notes without changing these bindings. Moving a bound note or changing its heading requires updating the authored binding, regenerating the snapshot and running the existing paired exporter/consumer check in the same change. Navigation aliases do not replace exact source paths or PDF page evidence.
 
+The accepted regional deployment uses catalogue Git blob `0e22085db177ba8089d1a168135aea8524846152` and producer `catalog.ref: c2c8d344eb21ca7a719a78a16a574d1c3ea29bb9`. Its repacked chunks preserve the original mesh identities and geometry. The native producer repin changes only `catalog.ref` and `catalog.gitBlobSha`; regeneration also changes `sourceInput.sha256`. All seven selections, ordered targets, source bindings, evidence and terminology remain unchanged. SpaceO's CI consumer ref advances to the final integrated Atlas head while the catalogue blob stays exact. See [regional compatibility](REGIONAL-ATLAS.md#spaceo-integration) and [deployment identities](REGIONAL-DEPLOYMENT.md).
+
 The consumer checks `schemaVersion: 1`, `courseId: "spaceo-uni-anatomija"`, the private flag, source routes, evidence categories, original English names, ordered concept membership and derived mesh selections. Both the snapshot and the actual served catalogue must match the exact Git blob pin. Identifiers retain their catalogue namespace; no TA2 equivalence is inferred. An unmapped objective cannot contain concept or mesh IDs. A context selection cannot become its highlight.
 
 `student-reported-emphasis` is displayed as reported by the student and links to the verified original capture. It is distinct from `course-material` and `bonus`; none defines a complete exam syllabus. A concept's bilateral scope is distinct from the selected individual mesh and the side shown by a source figure.
@@ -34,13 +36,15 @@ The inspector keeps authored terms first, followed by other meshes in the visibl
 
 Regional context and unmapped-objective context remain separate. An unmapped objective always has zero selected meshes, even when its surrounding region is visible.
 
+Public catalogue regions are independent navigation views. Their complete crossing meshes can make public Hand or Foot broader than the authored course context. Course routes continue to use their authored memberships; public regions do not add syllabus targets or replace teaching selections. Both resolve before scene initialization, and full-body loading remains an explicit Explorer action.
+
 ## Run the existing app privately
 
 Build with the matching installed dependencies and `npm run build`; use `npm ci` for a fresh or inconsistent checkout. Serve the resulting static application with `npm run serve:private` using the existing OMV service/process manager and private network or authenticated reverse proxy. The runtime requires Node 22.13+ and adds no package dependencies.
 
 | Runtime variable | Value |
 | --- | --- |
-| `ATLAS_COURSE_FILE` | Absolute path to the generated `.spaceo/tmp/human-atlas-course.json` output |
+| `ATLAS_COURSE_FILE` | Absolute path to the validated generated export; the accepted deployment uses an immutable private copy described in [its deployment record](REGIONAL-DEPLOYMENT.md) |
 | `ATLAS_SPACEO_ROOT` | Absolute path to the complete SpaceO checkout holding its bound sources |
 | `ATLAS_VAULT_NAME` | Observed Obsidian vault name; enables exact native note links |
 | `ATLAS_VAULT_ROOT` | Repository-relative vault root, default `Notes` |
@@ -67,6 +71,8 @@ Hashes work with the existing static entry point and do not require a new router
 
 | Destination | Hash format |
 | --- | --- |
+| Region chooser | No scene hash |
+| Public anatomical region | `#region=<region-id>`; optional side, layer, structure, mesh, view and isolation |
 | Course default | `#course=spaceo-uni-anatomija` |
 | Whole prepared region | `#course=spaceo-uni-anatomija&selection=<selection-id>` |
 | Course structure | `#course=spaceo-uni-anatomija&selection=<selection-id>&structure=<catalogue-id>` |
@@ -96,4 +102,4 @@ The output includes the exact bound note paths/headings and remains private. Do 
 
 Use `.private-course/` for optional local staging, or point directly at the SpaceO export. `.gitignore` and `.dockerignore` exclude private inputs and source assets. Neither the build nor the browser source imports the snapshot. Vite's build guard checks public assets, client import boundaries and output even when Vite is invoked directly. A private file copied into `public/`, a client source tree or a generated public asset fails the build. Adding a genuinely public data/media asset requires a deliberate reviewed allowlist change.
 
-The default Vercel/static build remains the public explorer. Software MIT and BodyParts3D attribution are preserved independently of private teaching-material rights.
+The default Vercel/static build opens the public region chooser; complete-body Explorer is explicit. Software MIT and BodyParts3D attribution are preserved independently of private teaching-material rights.

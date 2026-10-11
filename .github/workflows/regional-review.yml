@@ -18,6 +18,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          fetch-depth: 0 # Exact-byte regional proof reads accepted PR #1 source 5224668.
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -29,7 +30,8 @@ jobs:
           npm run test:runtime
           npm run test:geometry
           npm run test:scene
-          node --experimental-strip-types --test scripts/scene-scope.test.mjs
+          npm run test:regions
+          npm run test:loading
           node scripts/validate-atlas.mjs
           node scripts/validate-interactions.mjs
           npm run build
