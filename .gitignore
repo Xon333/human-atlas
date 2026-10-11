@@ -37,3 +37,15 @@ next-env.d.ts
 /outputs/
 /work/
 *.tsbuildinfo
+
+# Private UNI runtime inputs (never included in the public app)
+/.private-course/
+/.spaceo/
+/Notes/
+/Attachments/
+human-atlas-course.json
+course.private.json
+/course.json
+/public/**/course.json
+/public/Notes/
+/public/Attachments/

@@ -1,0 +1,13 @@
+# Keep local course data and credentials out of any deployment build context.
+.git
+.env*
+.private-course
+.spaceo
+Notes
+Attachments
+**/human-atlas-course.json
+**/course.private.json
+course.json
+public/**/course.json
+public/Notes
+public/Attachments
