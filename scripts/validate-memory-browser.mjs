@@ -15,7 +15,7 @@ await mkdir(output,{recursive:true});
 const {server}=await createPrivateServer({...runtimeConfig(),host:'127.0.0.1',port:0,origin:null});
 server.listen(0,'127.0.0.1');await once(server,'listening');
 let browser;
-const report={baseline,kind:'Actual WebGL buffer allocation and explicit deletion, not total memory',samples:[],errors:[]};
+const report={baseline,kind:'WebGL buffer allocation, explicit deletion and observed context loss; not total memory',samples:[],errors:[]};
 try {
  browser=await chromium.launch({headless:true,args:process.env.ATLAS_SOFTWARE_GL==='1'?['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']:[]});
  const page=await browser.newPage({viewport:{width:1440,height:1000},reducedMotion:'reduce'});
@@ -30,7 +30,12 @@ try {
    const gl=get.apply(this,args);
    if(gl&&['webgl','webgl2','experimental-webgl'].includes(args[0])&&!contexts.has(gl)){
     const id=++cid;contexts.set(gl,id);this.dataset.memoryContextId=String(id);
-    records.set(id,{buffers:new Map(),bindings:new Map(),textures:new Set()});
+    const record={buffers:new Map(),bindings:new Map(),textures:new Set(),contextLost:false};
+    records.set(id,record);
+    // The browser event, not a request to lose the context, establishes this transition.
+    // Keep explicit-delete counts intact: loss and deleteTexture are distinct mechanisms.
+    this.addEventListener('webglcontextlost',()=>{record.contextLost=true;});
+    this.addEventListener('webglcontextrestored',()=>{record.contextLost=false;});
    }
    return gl;
   };
@@ -58,7 +63,7 @@ try {
     };
    }
   }
-  window.__memorySample=()=>[...records].map(([id,r])=>({id,connected:!!document.querySelector(`canvas[data-memory-context-id="${id}"]`),bufferBytes:[...r.buffers.values()].reduce((a,b)=>a+b,0),buffers:r.buffers.size,textures:r.textures.size}));
+  window.__memorySample=()=>[...records].map(([id,r])=>({id,connected:!!document.querySelector(`canvas[data-memory-context-id="${id}"]`),bufferBytes:[...r.buffers.values()].reduce((a,b)=>a+b,0),buffers:r.buffers.size,undeletedTextureHandles:r.textures.size,contextLost:r.contextLost}));
  });
  const base=`http://127.0.0.1:${server.address().port}/`;
  await page.goto(base,{waitUntil:'domcontentloaded',timeout:60000});
@@ -81,14 +86,16 @@ try {
  const sample=async label=>{
   const contexts=await page.evaluate(()=>window.__memorySample());
   const active=contexts.filter(c=>c.connected);
+  const row={label,contexts,activeBytes:active[0]?.bufferBytes,activeId:active[0]?.id};
+  report.samples.push(row);console.log('MEMORY',JSON.stringify(row));
   assert.equal(active.length,1,'Exactly one displayed 3D context');
+  assert.equal(active[0].contextLost,false,'The displayed renderer must have a usable context');
   assert.ok(active[0].bufferBytes>0,'Instrumentation must see real allocated geometry');
   if(!baseline)for(const c of contexts.filter(c=>!c.connected)){
-   assert.equal(c.bufferBytes,0,'Replaced renderer retains uploaded buffer bytes');
-   assert.equal(c.textures,0,'Replaced renderer retains textures');
+   assert.equal(c.bufferBytes,0,'Replaced renderer retains explicitly owned buffer bytes');
+   assert.equal(c.contextLost,true,'Retired renderer must complete its existing context-loss cleanup');
   }
-  const row={label,contexts,activeBytes:active[0].bufferBytes,activeId:active[0].id};
-  report.samples.push(row);console.log('MEMORY',JSON.stringify(row));return row;
+  return row;
  };
  await navigate({mode:'explorer'});const full=await sample('full-explorer');
  for(let cycle=0;cycle<3;cycle++)for(const selection of payload.course.selections.slice(0,3)){
