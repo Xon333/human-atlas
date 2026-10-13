@@ -14,21 +14,20 @@ export async function decodeModelResponse(response:Response,expectedBytes:number
  }
  const reader=new Blob([payload]).stream().pipeThrough(new DecompressionStream('gzip')).getReader();
  const cancel=()=>{void reader.cancel(signal?.reason).catch(()=>{});};
- const pieces:Uint8Array[]=[];let length=0;
+ // Fill the final allocation directly; do not retain every decoded chunk and
+ // then duplicate the entire region buffer at the end of decompression.
+ const buffer=new ArrayBuffer(expectedBytes),bytes=new Uint8Array(buffer);let length=0;
  signal?.addEventListener('abort',cancel,{once:true});
  try{
   while(true){
    const {done,value}=await reader.read();signal?.throwIfAborted();if(done)break;
-   length+=value.byteLength;
-   if(length>expectedBytes)throw new Error('An anatomy file was incomplete. Please reload the viewer.');
-   pieces.push(value);
+   if(length+value.byteLength>expectedBytes)throw new Error('An anatomy file was incomplete. Please reload the viewer.');
+   bytes.set(value,length);length+=value.byteLength;
   }
   if(length!==expectedBytes)throw new Error('An anatomy file was incomplete. Please reload the viewer.');
-  const buffer=new ArrayBuffer(length),bytes=new Uint8Array(buffer);let offset=0;
-  for(const piece of pieces){bytes.set(piece,offset);offset+=piece.byteLength;}
   return buffer;
  }finally{
-  signal?.removeEventListener('abort',cancel);pieces.length=0;
+  signal?.removeEventListener('abort',cancel);
   await reader.cancel().catch(()=>{});reader.releaseLock();
  }
 }

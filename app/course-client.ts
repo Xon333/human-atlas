@@ -37,6 +37,7 @@ export function usePrivateCourse(atlas: Atlas | null, catalogue: string) {
     (async () => {
       try {
         const response = await fetch('/api/course', {signal: abort.signal, cache: 'no-store', credentials: 'same-origin'});
+        abort.signal.throwIfAborted();
         if (response.status === 404) {setStatus('unavailable'); return;}
         // Static SPA hosts may rewrite an unknown API path to their HTML entry point.
         if (response.ok && !response.headers.get('content-type')?.includes('application/json')) {setStatus('unavailable'); return;}

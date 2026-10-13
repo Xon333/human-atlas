@@ -125,3 +125,12 @@
 .region-panel .course-selection-list button { justify-content: space-between; }
 .region-panel details { border-block: 1px solid var(--border); } .region-panel details+details { border-top: 0; }
 @media (max-width: 767px) { .limb-groups { gap: 18px; } .limb-groups nav { grid-template-columns: 1fr; } .limb-groups a, .limb-groups summary, .surface-entry a { min-height: 44px; } }
+
+/* Text filtering never changes geometry, the active selection or authored order. */
+.course-search { display: grid; gap: 6px; margin: 12px 14px; font-size: 11px; color: var(--muted-foreground); }
+.course-search input { min-width: 0; width: 100%; padding: 9px 10px; border: 1px solid var(--input); border-radius: 6px; background: var(--background); color: var(--foreground); font: inherit; font-size: 13px; }
+.course-search input:focus-visible { outline: 2px solid var(--highlight, #00e5ff); outline-offset: 2px; }
+.course-detail .course-search { margin: 12px 0; }
+.course-search-status { margin: 4px 14px 10px; color: var(--muted-foreground); font-size: 11px; }
+.course-detail .course-search-status { margin-inline: 0; }
+.course-source-actions a { overflow-wrap: anywhere; }

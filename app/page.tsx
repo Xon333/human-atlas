@@ -13,6 +13,7 @@ import {RegionChooser,RegionPanel,RegionInspector,RegionControls} from './region
 import {cameraViewOptions,defaultStudyView} from './camera-views';
 import {DEFAULT_VISIBLE,SYSTEMS,HIGHLIGHTS,EXPLANATIONS,explanation,type Atlas,type Concept,type SceneState,type SystemId,type View} from './anatomy';
 import {usePrivateCourse} from './course-client';
+import {matchesSearch,normalizeSearchText,searchRank} from './search';
 import {CourseInspector,CoursePanel,CopySceneLink} from './course-ui';
 import {resolveAtlasRoute,resolveAtlasLink,serializeAtlasLink,publicTargetLink,type AtlasLink} from './course-navigation';
 import type {CourseConcept,CourseSelection,UnmappedObjective} from './course';
@@ -44,16 +45,15 @@ export default function Home(){
  const objective=course?.unmappedObjectives.find(item=>item.id===activeLink.objectiveId);
  const results=useMemo(()=>{
   if(!atlas)return[];
-  const normalize=(value:string)=>value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
-  const queryText=normalize(query).trim(),scope=new Set(publicRegion?.elements??courseSelection?.region?.elements??courseSelection?.elements??[]);
+  const queryText=normalizeSearchText(query),scope=new Set(publicRegion?.elements??courseSelection?.region?.elements??courseSelection?.elements??[]);
   const inRegion=(c:Concept)=>c.elements.length>0&&c.elements.every(id=>scope.has(id));
   const shown=new Set(state.scope??[]),inView=(c:Concept)=>c.elements.some(id=>shown.has(id));
   if(!queryText&&!regional)return ['heart','brain','liver','stomach','spleen','pancreas','urinary bladder','trachea'].map(name=>atlas.concepts.find(c=>c.name.toLowerCase()===name)).filter((x):x is Concept=>!!x);
   return atlas.concepts.filter(c=>{
    if(!queryText)return inRegion(c);
    const alias=courseTerms.get(c.id);
-   return normalize([c.name,c.id,alias?.labels.sl,alias?.labels.la].filter(Boolean).join(' ')).includes(queryText);
-  }).sort((a,b)=>Number(regional&&inRegion(b))-Number(regional&&inRegion(a))||Number(regional&&inView(b))-Number(regional&&inView(a))||Number(courseMode&&courseTerms.has(b.id))-Number(courseMode&&courseTerms.has(a.id))||a.name.length-b.name.length).slice(0,80);
+   return matchesSearch(queryText,[alias?.labels.sl,alias?.labels.la,c.name,c.id]);
+  }).sort((a,b)=>Number(regional&&inRegion(b))-Number(regional&&inRegion(a))||Number(regional&&inView(b))-Number(regional&&inView(a))||Number(courseMode&&courseTerms.has(b.id))-Number(courseMode&&courseTerms.has(a.id))||searchRank(queryText,[courseTerms.get(a.id)?.labels.sl,courseTerms.get(a.id)?.labels.la,a.name,a.id])-searchRank(queryText,[courseTerms.get(b.id)?.labels.sl,courseTerms.get(b.id)?.labels.la,b.name,b.id])||a.name.length-b.name.length).slice(0,80);
  },[atlas,query,courseMode,regional,publicRegion,courseSelection,courseTerms,state.scope]);
  const invalidateLink=useCallback((message:string)=>{const neutral:AtlasLink={mode:'explorer'};currentLink.current=neutral;setActiveLink(neutral);setSceneReady(false);setRouteLoading(false);setLinkError(message);setChosen(null);setDetails(false);setPanel(null);setState(s=>({...initial,visible:DEFAULT_VISIBLE,reset:s.reset+1}));},[]);
  const applyLink=useCallback((request:AtlasLink,preserveExplorerView=false):AtlasLink|null=>{
