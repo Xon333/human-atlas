@@ -7,7 +7,8 @@ import {GpuFrameGate,VisibleFrameClock,updateVisibleControls} from './scene-fram
 import {createExplosionLayout} from './explosion-layout';
 import {decodeModelResponse,loadModelChunks} from './model-download';
 import {PointerTap} from './pointer-tap';
-import {SYSTEMS,type Atlas,type SceneState} from './anatomy';
+import {CAMERA_VIEWS,type View} from './camera-views';
+import {SYSTEMS,HIGHLIGHTS,type Atlas,type SceneState} from './anatomy';
 let nextOwner=0;
 interface Props {atlas:Atlas;state:SceneState;onSelect:(id:string)=>void;onProgress:(n:number)=>void;onError:(s:string)=>void}
 export default function AnatomyScene({atlas,state,onSelect,onProgress,onError}:Props){
@@ -33,7 +34,7 @@ export default function AnatomyScene({atlas,state,onSelect,onProgress,onError}:P
   renderer.setPixelRatio(Math.min(devicePixelRatio,innerWidth<768?1.5:2));renderer.setClearColor('#080c13');renderer.outputColorSpace=T.SRGBColorSpace;renderer.toneMapping=T.ACESFilmicToneMapping;renderer.toneMappingExposure=1.02;el.appendChild(renderer.domElement);
   renderer.domElement.setAttribute('aria-label','Interactive human anatomy. Drag to orbit, pinch or scroll to zoom, and tap a structure to inspect it.');
   const scene=new T.Scene(),camera=new T.PerspectiveCamera(34,1,.005,100),controls=new OrbitControls(camera,renderer.domElement);
-  camera.position.set(1.4,1.05,3.6);controls.target.set(0,.85,0);controls.enableDamping=true;controls.dampingFactor=.085;controls.minDistance=.07;controls.maxDistance=40;controls.maxPolarAngle=Math.PI*.96;controls.addEventListener('change',requestRender);
+  camera.position.set(1.4,1.05,3.6);controls.target.set(0,.85,0);controls.enableDamping=true;controls.dampingFactor=.085;controls.minDistance=.07;controls.maxDistance=40;controls.minPolarAngle=.00001;controls.maxPolarAngle=Math.PI-.00001;controls.addEventListener('change',requestRender);
   const pmrem=new T.PMREMGenerator(renderer),room=new RoomEnvironment(),env=pmrem.fromScene(room,.04);scene.environment=env.texture;room.dispose();pmrem.dispose();
   scene.add(new T.HemisphereLight(0xffffff,0xb5c6dc,.65));
   const key=new T.DirectionalLight(0xfffaf4,1.7);key.position.set(-2,4,3);scene.add(key);
@@ -62,17 +63,19 @@ export default function AnatomyScene({atlas,state,onSelect,onProgress,onError}:P
    for(const t of targets){const dx=Math.max(t.left-x,0,x-t.right),dy=Math.max(t.top-y,0,y-t.bottom),distance=Math.hypot(dx,dy);if(distance>radius)continue;const candidate=distance+Math.hypot(t.x-x,t.y-y)*.025;if(candidate<score){score=candidate;best=t.index;}}
    return best;
   };
-  const selectionActive={value:0},selectionAccent={value:new T.Color('#ffc76a')},selectionGlow={value:new T.Color('#ffb84d')};
+  const selectionActive={value:0},selectionAccent={value:new T.Color(HIGHLIGHTS.cyan)},selectionDisplayAccent={value:new T.Color(HIGHLIGHTS.cyan).convertLinearToSRGB()};
   const materialFor=(system:string)=>{
    const m=new T.MeshStandardMaterial({color:SYSTEMS.find(s=>s.id===system)?.color??'#aebbb8',metalness:.02,roughness:.7,envMapIntensity:.55,side:T.DoubleSide,transparent:system==='integumentary',opacity:system==='integumentary'?.1:1,depthWrite:system!=='integumentary'});
    m.onBeforeCompile=shader=>{
-    shader.uniforms.partState={value:partTexture};shader.uniforms.selectionState={value:selectionTexture};shader.uniforms.stateWidth={value:width};shader.uniforms.selectionActive=selectionActive;shader.uniforms.selectionAccent=selectionAccent;shader.uniforms.selectionGlow=selectionGlow;
+    shader.uniforms.partState={value:partTexture};shader.uniforms.selectionState={value:selectionTexture};shader.uniforms.stateWidth={value:width};shader.uniforms.selectionActive=selectionActive;shader.uniforms.selectionAccent=selectionAccent;shader.uniforms.selectionDisplayAccent=selectionDisplayAccent;
     shader.vertexShader='attribute float partIndex; uniform sampler2D partState; uniform sampler2D selectionState; uniform float stateWidth; varying float partVisible; varying float partSelected;\n'+shader.vertexShader;
     shader.vertexShader=shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvec2 stateUv = vec2((partIndex + 0.5) / stateWidth, 0.5); vec4 state = texture2D(partState, stateUv); transformed += state.xyz; partVisible = state.w; partSelected = texture2D(selectionState, stateUv).r;');
-    shader.fragmentShader='uniform float selectionActive; uniform vec3 selectionAccent; uniform vec3 selectionGlow; varying float partVisible; varying float partSelected;\n'+shader.fragmentShader;
+    shader.fragmentShader='uniform float selectionActive; uniform vec3 selectionAccent; uniform vec3 selectionDisplayAccent; varying float partVisible; varying float partSelected;\n'+shader.fragmentShader;
     shader.fragmentShader=shader.fragmentShader.replace('#include <clipping_planes_fragment>','#include <clipping_planes_fragment>\nif (partVisible < 0.5) discard;');
     shader.fragmentShader=shader.fragmentShader.replace('#include <color_fragment>','#include <color_fragment>\nfloat contextLight = dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722));\nvec3 contextColor = vec3(0.10, 0.13, 0.16) + contextLight * vec3(0.26, 0.28, 0.30);\ndiffuseColor.rgb = mix(diffuseColor.rgb, contextColor, selectionActive * (1.0 - partSelected) * 0.88);\ndiffuseColor.rgb = mix(diffuseColor.rgb, selectionAccent, partSelected);\ndiffuseColor.a = mix(diffuseColor.a, 1.0, partSelected);');
-    shader.fragmentShader=shader.fragmentShader.replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\ntotalEmissiveRadiance += selectionGlow * partSelected * 0.16;');
+    // Apply the selected hue after tone mapping so white lights cannot bleach it.
+    // Keep restrained surface shading and normal depth/occlusion, with no extra pass.
+    shader.fragmentShader=shader.fragmentShader.replace('#include <colorspace_fragment>','#include <colorspace_fragment>\nfloat selectionShade = 0.72 + 0.28 * clamp(dot(outgoingLight, vec3(0.2126, 0.7152, 0.0722)), 0.0, 1.0);\ngl_FragColor.rgb = mix(gl_FragColor.rgb, selectionDisplayAccent * selectionShade, partSelected);');
    };materials.push(m);return m;
   };
   const mats=new Map(SYSTEMS.map(s=>[s.id,materialFor(s.id)]));
@@ -94,8 +97,8 @@ export default function AnatomyScene({atlas,state,onSelect,onProgress,onError}:P
    groups.clear();groupIndices.clear();lastState=null;loaded++;el.dataset.loadedChunks=String(loaded);el.dataset.pickerOwners=String(pickers.filter(Boolean).length);el.dataset.renderBatches=String(batches.length);progress.current(Math.round(loaded/atlas.chunks.length*100));requestRender();
   };
 
-  const viewDirection=(view:string)=>view==='front'?new T.Vector3(0,.02,1):view==='back'?new T.Vector3(0,.02,-1):view==='side'?new T.Vector3(1,.02,0):new T.Vector3(.35,.06,1).normalize();
-  const fit=(view:string,extent=0)=>{
+  const viewDirection=(view:View)=>new T.Vector3(...CAMERA_VIEWS[view].direction).normalize();
+  const fit=(view:View,extent=0)=>{
    const aspect=camera.aspect,mobile=el.clientWidth<768,normalDistance=mobile?Math.max(4.5,1.8*el.clientHeight/Math.max(160,el.clientHeight-350)/(2*Math.tan(T.MathUtils.degToRad(camera.fov/2)))):4;
    const reservedHeight=mobile?350:270;const availableAspect=Math.max(.35,(el.clientWidth-(mobile?40:340))/Math.max(160,el.clientHeight-reservedHeight));const atlasDistance=Math.max(packingHeight,packingWidth/availableAspect)/(2*Math.tan(T.MathUtils.degToRad(camera.fov/2)))*(el.clientHeight/Math.max(160,el.clientHeight-reservedHeight))*1.08;
    const distance=T.MathUtils.lerp(normalDistance,Math.max(.2,atlasDistance),extent);if(extent>.8)view='front';
@@ -125,7 +128,7 @@ export default function AnatomyScene({atlas,state,onSelect,onProgress,onError}:P
    if(!gpu.ready()){frame=requestAnimationFrame(animate);return;}
    inFrame=true;const dt=frameClock.tick(time);
    const s=latest.current,hasContext=!!s.context?.length,focusIds=hasContext?s.context!:s.isolate?s.selected:s.scope?[...new Set([...s.scope,...s.selected])]:null,isolated=focusIds!==null;
-   const changed=lastState?.visible!==s.visible||lastState?.selected!==s.selected||lastState?.isolate!==s.isolate||lastState?.context!==s.context||lastState?.scope!==s.scope;
+   const changed=lastState?.highlight!==s.highlight||lastState?.visible!==s.visible||lastState?.selected!==s.selected||lastState?.isolate!==s.isolate||lastState?.context!==s.context||lastState?.scope!==s.scope;
    const moving=Math.abs(amount-s.explode)>.0001;
    if(moving){amount=T.MathUtils.damp(amount,s.explode,8,dt);dirty=true;}
    if(changed||moving||lastExtent<0){
@@ -146,6 +149,7 @@ export default function AnatomyScene({atlas,state,onSelect,onProgress,onError}:P
     // Keep the existing per-part shader mask for mixed batches. Entirely hidden
     // batches need no draw call, vertex work or fragment discard.
     batches.forEach(({mesh,indices})=>{mesh.visible=indices.some(i=>data[i*4+3]>.5);});
+    selectionAccent.value.set(HIGHLIGHTS[s.highlight??'cyan']);selectionDisplayAccent.value.copy(selectionAccent.value).convertLinearToSRGB();
     selectionActive.value=highlightedCount?1:0;el.dataset.highlightedParts=String(highlightedCount);el.dataset.visibleParts=String(visibleCount);
     partTexture.needsUpdate=true;selectionTexture.needsUpdate=true;markerGeometry.attributes.position.needsUpdate=true;lastState=s;lastExtent=amount;dirty=true;
    }

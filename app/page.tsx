@@ -10,8 +10,10 @@ import {Sheet,SheetContent,SheetTitle,SheetDescription} from '@/components/ui/sh
 import {Combobox,ComboboxInput,ComboboxContent,ComboboxList,ComboboxItem,ComboboxEmpty} from '@/components/ui/combobox';
 import {atlasRegions} from './atlas-regions';
 import {RegionChooser,RegionPanel,RegionInspector,RegionControls} from './region-ui';
-import {DEFAULT_VISIBLE,SYSTEMS,EXPLANATIONS,explanation,type Atlas,type Concept,type SceneState,type SystemId,type View} from './anatomy';
+import {cameraViewOptions,defaultStudyView} from './camera-views';
+import {DEFAULT_VISIBLE,SYSTEMS,HIGHLIGHTS,EXPLANATIONS,explanation,type Atlas,type Concept,type SceneState,type SystemId,type View} from './anatomy';
 import {usePrivateCourse} from './course-client';
+import {matchesSearch,normalizeSearchText,searchRank} from './search';
 import {CourseInspector,CoursePanel,CopySceneLink} from './course-ui';
 import {resolveAtlasRoute,resolveAtlasLink,serializeAtlasLink,publicTargetLink,type AtlasLink} from './course-navigation';
 import type {CourseConcept,CourseSelection,UnmappedObjective} from './course';
@@ -43,16 +45,15 @@ export default function Home(){
  const objective=course?.unmappedObjectives.find(item=>item.id===activeLink.objectiveId);
  const results=useMemo(()=>{
   if(!atlas)return[];
-  const normalize=(value:string)=>value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
-  const queryText=normalize(query).trim(),scope=new Set(publicRegion?.elements??courseSelection?.region?.elements??courseSelection?.elements??[]);
+  const queryText=normalizeSearchText(query),scope=new Set(publicRegion?.elements??courseSelection?.region?.elements??courseSelection?.elements??[]);
   const inRegion=(c:Concept)=>c.elements.length>0&&c.elements.every(id=>scope.has(id));
   const shown=new Set(state.scope??[]),inView=(c:Concept)=>c.elements.some(id=>shown.has(id));
   if(!queryText&&!regional)return ['heart','brain','liver','stomach','spleen','pancreas','urinary bladder','trachea'].map(name=>atlas.concepts.find(c=>c.name.toLowerCase()===name)).filter((x):x is Concept=>!!x);
   return atlas.concepts.filter(c=>{
    if(!queryText)return inRegion(c);
    const alias=courseTerms.get(c.id);
-   return normalize([c.name,c.id,alias?.labels.sl,alias?.labels.la].filter(Boolean).join(' ')).includes(queryText);
-  }).sort((a,b)=>Number(regional&&inRegion(b))-Number(regional&&inRegion(a))||Number(regional&&inView(b))-Number(regional&&inView(a))||Number(courseMode&&courseTerms.has(b.id))-Number(courseMode&&courseTerms.has(a.id))||a.name.length-b.name.length).slice(0,80);
+   return matchesSearch(queryText,[alias?.labels.sl,alias?.labels.la,c.name,c.id]);
+  }).sort((a,b)=>Number(regional&&inRegion(b))-Number(regional&&inRegion(a))||Number(regional&&inView(b))-Number(regional&&inView(a))||Number(courseMode&&courseTerms.has(b.id))-Number(courseMode&&courseTerms.has(a.id))||searchRank(queryText,[courseTerms.get(a.id)?.labels.sl,courseTerms.get(a.id)?.labels.la,a.name,a.id])-searchRank(queryText,[courseTerms.get(b.id)?.labels.sl,courseTerms.get(b.id)?.labels.la,b.name,b.id])||a.name.length-b.name.length).slice(0,80);
  },[atlas,query,courseMode,regional,publicRegion,courseSelection,courseTerms,state.scope]);
  const invalidateLink=useCallback((message:string)=>{const neutral:AtlasLink={mode:'explorer'};currentLink.current=neutral;setActiveLink(neutral);setSceneReady(false);setRouteLoading(false);setLinkError(message);setChosen(null);setDetails(false);setPanel(null);setState(s=>({...initial,visible:DEFAULT_VISIBLE,reset:s.reset+1}));},[]);
  const applyLink=useCallback((request:AtlasLink,preserveExplorerView=false):AtlasLink|null=>{
@@ -66,6 +67,9 @@ export default function Home(){
    const preserve=preserveExplorerView&&((before.mode==='explorer'&&next.mode==='explorer')||sameRegion);
    if(preserve){
     next.view=next.view??sceneState.current.view;
+   }
+   if(next.mode==='course'&&!next.view){
+    next.view=defaultStudyView(atlas,resolved.scopeElements??resolved.contextElements);
    }
    const target=!!(next.structureId||next.meshId);
    const selected=next.mode!=='explorer'&&!target&&!next.isolate?[]:resolved.elements;
@@ -126,7 +130,7 @@ export default function Home(){
  const clearRoute=()=>{const next:AtlasLink={mode:'explorer'};currentLink.current=next;setActiveLink(next);setChosen(null);setDetails(false);setLinkError('');const hash=serializeAtlasLink(next);history.replaceState(null,'',`${location.pathname}${location.search}${hash}`);appliedHash.current=hash;};
  const setLayers=(visible:SystemId[])=>{clearRoute();setState(s=>({...s,selected:[],scope:undefined,context:undefined,isolate:false,visible}));};
  const toggle=(id:SystemId)=>setLayers(state.visible.includes(id)?state.visible.filter(x=>x!==id):[...state.visible,id]);
- const reset=()=>{if(publicRegion){navigate({mode:'region',regionId:publicRegion.id,side:activeLink.side,layer:activeLink.layer,view:'three-quarter'},true);}else if(courseMode){navigate({mode:'course',courseId:course!.courseId,selectionId:courseSelection?.id??course?.selections.find(s=>s.id===objective?.contextSelectionId)?.id,side:activeLink.side,layer:activeLink.layer,view:'three-quarter'},true);}else{clearRoute();setState(s=>({...initial,visible:DEFAULT_VISIBLE,reset:s.reset+1}));setPanel(null);}};
+ const reset=()=>{if(publicRegion){navigate({mode:'region',regionId:publicRegion.id,side:activeLink.side,layer:activeLink.layer,view:'three-quarter'},true);}else if(courseMode){navigate({mode:'course',courseId:course!.courseId,selectionId:courseSelection?.id??course?.selections.find(s=>s.id===objective?.contextSelectionId)?.id,side:activeLink.side,layer:activeLink.layer},true);}else{clearRoute();setState(s=>({...initial,visible:DEFAULT_VISIBLE,reset:s.reset+1}));setPanel(null);}};
  const openPanel=(next:'layers'|'search'|'course'|'regions')=>{setDetails(false);setPanel(p=>p===next?null:next);};
  const patchSceneLink=(patch:Partial<AtlasLink>)=>{const next={...currentLink.current,...patch};const hash=serializeAtlasLink(next);currentLink.current=next;setActiveLink(next);history.replaceState(null,'',`${location.pathname}${location.search}${hash}`);appliedHash.current=hash;};
  const changeRegionView=(patch:{side?:StudySide;layer?:StudyLayer})=>{if(publicRegion)navigate({mode:'region',regionId:publicRegion.id,side:activeLink.side,layer:activeLink.layer,...patch,view:state.view});else if(course&&courseSelection)navigate({mode:'course',courseId:course.courseId,selectionId:courseSelection.id,side:activeLink.side,layer:activeLink.layer,...patch,view:state.view});};
@@ -135,7 +139,7 @@ export default function Home(){
  const home=()=>{history.pushState(null,'',`${location.pathname}${location.search}`);appliedHash.current='';setSceneReady(false);setRouteLoading(false);setLinkError('');setDetails(false);setPanel(null);};
  const regionTitle=courseSelection?.region?.label??courseSelection?.label??publicRegion?.label;
  if(!sceneReady)return <RegionChooser regions={regions} course={course} loading={!atlas&&!error} error={linkError||error} pending={routeLoading} courseStatus={privateCourse.status} onNavigate={next=>{if(!atlas)return;navigate(next);}}/>;
- return <main className={`studio ${courseMode?'course-mode':''} ${regional?'regional-mode':''}`} data-mode={courseMode?'course':publicRegion?'region':'explorer'} data-region={publicRegion?.id??''} data-selected-count={state.selected.length} data-context-count={state.context?.length??0} data-active-structure={activeLink.structureId??''} data-scope-count={state.scope?.length??0} data-isolate={String(state.isolate)} data-camera-reset={state.reset}>
+ return <main className={`studio ${courseMode?'course-mode':''} ${regional?'regional-mode':''}`} style={{'--highlight':HIGHLIGHTS[state.highlight??'cyan']} as React.CSSProperties} data-mode={courseMode?'course':publicRegion?'region':'explorer'} data-region={publicRegion?.id??''} data-selected-count={state.selected.length} data-context-count={state.context?.length??0} data-active-structure={activeLink.structureId??''} data-scope-count={state.scope?.length??0} data-isolate={String(state.isolate)} data-camera-reset={state.reset}>
   {atlas&&<Suspense fallback={null}><AnatomyScene atlas={atlas} state={{...state,inspectorOpen:details&&(regional||selectedParts.length>0||!!objective)}} onSelect={choosePart} onProgress={n=>{setProgress(n);if(n===100)setError('');}} onError={setError}/></Suspense>}
   <div className="vignette"/>
   <header className="studio-header identity"><Button variant="ghost" className="brand" onClick={home}>Human Atlas <small>3D</small></Button><span className="header-divider"/><h1 className="current-view">{courseMode?'UNI · '+(regionTitle??'Fizioterapija'):publicRegion?.label??'Full Body Explorer'}</h1><nav className="top-actions" aria-label="Atlas controls"><Button variant="ghost" onClick={()=>openPanel(regional?(courseMode?'course':'regions'):'layers')} aria-expanded={panel===(regional?(courseMode?'course':'regions'):'layers')}><Layers3 size={16}/><span>{courseMode?'Predeli':publicRegion?'Regions':'Systems'}</span></Button><Button variant="ghost" className={panel==='search'?'active':''} onClick={()=>openPanel('search')} aria-label={courseMode?'Poišči strukturo':'Search anatomy'}><Search size={17}/><span>{courseMode?'Poišči':'Search'}</span><kbd>/</kbd></Button><Button variant="ghost" className="icon-button" aria-label="Source and credits" onClick={()=>{setDetails(false);setPanel(null);setAbout(true);}}><Info size={17}/></Button></nav></header>
@@ -151,7 +155,8 @@ export default function Home(){
   </section>}
   {panel==='search'&&<section className="search-panel glass" aria-label="Find anatomy"><div className="panel-heading"><span>{courseMode?'Poišči strukturo':'Find a structure'}</span><Button variant="ghost" className="icon-button" onClick={()=>setPanel(null)} aria-label="Close search"><X size={18}/></Button></div><Combobox<Concept> items={results} value={null} onValueChange={value=>{if(value)choose(value);}} inputValue={query} onInputValueChange={setQuery} itemToStringLabel={c=>c.name} filter={null} open onOpenChange={open=>{if(!open)setPanel(null);}}><ComboboxInput autoFocus placeholder={courseMode?'Slovensko, latinsko, English…':'Heart, femur, cranial nerve…'} aria-label="Search named anatomical structures" showTrigger={false}/><ComboboxContent className="anatomy-search-results"><ComboboxEmpty>{courseMode?'Ni zadetkov.':'No structures match your search.'}</ComboboxEmpty><ComboboxList>{(c:Concept)=><ComboboxItem key={c.id} value={c}><span className="search-result-name">{courseMode&&courseTerms.has(c.id)?<><strong>{courseTerms.get(c.id)!.labels.sl}</strong><small>{courseTerms.get(c.id)!.labels.la} · {c.name}</small></>:c.name}</span><span className="small-number">{c.elements.length} {c.elements.length===1?'piece':'pieces'}</span></ComboboxItem>}</ComboboxList></ComboboxContent></Combobox><p className="search-note">{courseMode?'Najprej predel, nato celoten atlas.':query?'Up to 80 matches.':'Search by name or catalogue ID.'}</p></section>}
   <nav className="view-controls glass" aria-label="Camera controls">
-   <label className="view-select"><span>{courseMode?'Perspektiva':'Perspective'}</span><select aria-label={courseMode?'Perspektiva':'Perspective'} value={state.view} onChange={event=>changeView(event.target.value as View)}>{([{id:'three-quarter',en:'Oblique',sl:'Poševno'},{id:'front',en:'Anterior',sl:'Anteriorno'},{id:'side',en:'Lateral',sl:'Lateralno'},{id:'back',en:'Posterior',sl:'Posteriorno'}] as const).map(view=><option key={view.id} value={view.id} disabled={state.explode>.8&&view.id!=='front'}>{courseMode?view.sl:view.en}</option>)}</select></label>
+   <label className="view-select"><span>{courseMode?'Perspektiva':'Perspective'}</span><select aria-label={courseMode?'Perspektiva':'Perspective'} value={state.view} onChange={event=>changeView(event.target.value as View)}>{cameraViewOptions(atlas,state.scope??state.context,activeLink.side).map(view=><option key={view.id} value={view.id} disabled={state.explode>.8&&view.id!=='front'}>{courseMode?view.sl:view.en}</option>)}</select></label>
+   <div className="highlight-colours" role="group" aria-label={courseMode?'Barva poudarka':'Highlight colour'}>{(Object.keys(HIGHLIGHTS) as (keyof typeof HIGHLIGHTS)[]).map(colour=><button key={colour} type="button" className="highlight-swatch" style={{'--swatch':HIGHLIGHTS[colour]} as React.CSSProperties} aria-label={`${courseMode?'Poudarek':'Highlight'}: ${colour}`} title={`${courseMode?'Poudarek':'Highlight'}: ${colour}`} aria-pressed={(state.highlight??'cyan')===colour} onClick={()=>setState(s=>({...s,highlight:colour}))}/>)}</div>
    <i/><Button variant="ghost" disabled={state.explode>=.4||state.isolate||!!state.context?.length} aria-label={state.rotate?'Pause rotation':'Rotate body'} title={courseMode?'Vrtenje':'Auto rotate'} className={state.rotate?'active':''} onClick={()=>setState(s=>({...s,rotate:!s.rotate}))}>{state.rotate?<Pause size={17}/>:<RotateCw size={18}/>}</Button><Button variant="ghost" aria-label="Reset view and layers" title={courseMode?'Ponastavi':'Reset'} onClick={reset}><RotateCcw size={17}/></Button>
   </nav>
   <div className={`bottom-dock glass ${courseMode?'course-dock':''}`}>

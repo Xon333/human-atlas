@@ -11,6 +11,7 @@ import * as download from '../app/model-download.ts';
 import * as layout from '../app/explosion-layout.ts';
 import * as pointer from '../app/pointer-tap.ts';
 import * as anatomy from '../app/anatomy.ts';
+import * as views from '../app/camera-views.ts';
 import * as scope from '../app/scene-scope.ts';
 
 class Element extends EventTarget {
@@ -73,7 +74,7 @@ function harness(t,fetcher){
  for(const [name,value] of Object.entries({document,devicePixelRatio:1,innerWidth:1280,ResizeObserver:Observer,IntersectionObserver:Observer,requestAnimationFrame:callback=>{const id=++serial;frames.set(id,callback);return id;},cancelAnimationFrame:id=>frames.delete(id),fetch:(url,options)=>{requests.push({url,signal:options.signal});return fetcher(url,options);}})){
   const old=Object.getOwnPropertyDescriptor(globalThis,name);Object.defineProperty(globalThis,name,{configurable:true,writable:true,value});t.after(()=>{if(old)Object.defineProperty(globalThis,name,old);else delete globalThis[name];});
  }
- const hook=hooks(host),component=compile('../app/scene-renderer.tsx',{'react':hook.react,'react/jsx-runtime':hook.jsx,three:{...Three,BufferGeometry,WebGLRenderer:Renderer,PMREMGenerator:PMREM},'three/examples/jsm/controls/OrbitControls.js':{OrbitControls:Controls},'three/examples/jsm/environments/RoomEnvironment.js':{RoomEnvironment:Room},'./model-geometry':geometry,'./scene-frame':frame,'./model-download':download,'./explosion-layout':layout,'./pointer-tap':pointer,'./anatomy':anatomy});
+ const hook=hooks(host),component=compile('../app/scene-renderer.tsx',{'react':hook.react,'react/jsx-runtime':hook.jsx,three:{...Three,BufferGeometry,WebGLRenderer:Renderer,PMREMGenerator:PMREM},'three/examples/jsm/controls/OrbitControls.js':{OrbitControls:Controls},'three/examples/jsm/environments/RoomEnvironment.js':{RoomEnvironment:Room},'./model-geometry':geometry,'./scene-frame':frame,'./model-download':download,'./explosion-layout':layout,'./pointer-tap':pointer,'./anatomy':anatomy,'./camera-views':views});
  const errors=[],progress=[],selections=[];
  const props={onSelect:id=>selections.push(id),onError:error=>errors.push(error),onProgress:value=>progress.push(value)};
  return {host,owners,controls,observers,frames,requests,geometryOwners,errors,progress,selections,
@@ -97,7 +98,7 @@ test('same-region selections reuse renderer, picker buffers and camera; context 
  assert.equal(h.host.dataset.sceneOwner,owner);assert.equal(h.owners.length,1);assert.equal(h.requests.length,calls);assert.equal(h.host.dataset.highlightedParts,'1');assert.equal(h.host.dataset.visibleParts,'2');
  assert.ok(renderer.camera.position.equals(camera));assert.deepEqual(batches.map(mesh=>mesh.geometry.attributes.position),positions);
  const material=batches.find(mesh=>mesh.geometry.getAttribute('partIndex')).material,shader={uniforms:{},vertexShader:Three.ShaderLib.standard.vertexShader,fragmentShader:Three.ShaderLib.standard.fragmentShader};
- material.onBeforeCompile(shader,renderer);assert.equal(shader.uniforms.selectionActive.value,1);assert.ok(shader.uniforms.selectionAccent.value.r>shader.uniforms.selectionAccent.value.g);assert.ok(shader.uniforms.selectionAccent.value.g>shader.uniforms.selectionAccent.value.b);
+ material.onBeforeCompile(shader,renderer);assert.equal(shader.uniforms.selectionActive.value,1);assert.ok(shader.uniforms.selectionAccent.value.b>shader.uniforms.selectionAccent.value.r);assert.ok(shader.uniforms.selectionAccent.value.g>shader.uniforms.selectionAccent.value.r);
  h.mount(atlas,{...state,selected:[]});h.frame();assert.equal(shader.uniforms.selectionActive.value,0);assert.equal(h.host.dataset.visibleParts,'2');assert.equal(h.host.dataset.highlightedParts,'0');
  // Context-only views deliberately carry no target tint; manual and automatic rotation remain available.
  h.mount(atlas,{...state,context:state.scope,selected:['part-1'],rotate:true});h.frame();
@@ -168,4 +169,31 @@ test('chunk progress does not draw partial assemblies before the requested geome
  completions.get('/1')(new Response(buffer));await settle();h.frame();
  assert.deepEqual(h.progress,[50,100]);assert.equal(h.host.dataset.loadState,'ready');
  assert.equal(h.owners[0].renders,1);assert.equal(h.host.dataset.visibleParts,'2');
+});
+
+for (const view of ['right-side','side','superior','inferior']) test(`${view} camera keeps a finite regional fit and reuses the scene`,async t=>{
+ const {atlas,buffer}=fixture(2),h=harness(t,async()=>new Response(buffer));t.after(h.unmount);
+ const state={...initial,scope:['part-0','part-1']};
+ h.mount(atlas,state);await settle();h.frame();
+ h.mount(atlas,{...state,view});h.frame();
+ const camera=h.owners[0].camera,offset=camera.position.clone().sub(h.controls[0].target).normalize();
+ const axis=view==='right-side'?[-1,0,0]:view==='side'?[1,0,0]:view==='superior'?[0,1,0]:[0,-1,0];
+ assert.ok(offset.dot(new Three.Vector3(...axis))>.99999);
+ assert.ok(camera.projectionMatrix.elements.every(Number.isFinite));
+ assert.equal(h.owners.length,1);assert.equal(h.requests.length,2);
+});
+test('highlight colour changes preserve the assembly, camera and renderer',async t=>{
+ const {atlas,buffer}=fixture(2),h=harness(t,async()=>new Response(buffer));t.after(h.unmount);
+ const state={...initial,scope:['part-0','part-1'],selected:['part-0']};
+ h.mount(atlas,state);await settle();h.frame();
+ const position=h.owners[0].camera.position.clone();
+ let material;h.owners[0].scene.traverse(o=>{if(o.geometry?.getAttribute('partIndex')) material=o.material;});
+ const shader={uniforms:{},vertexShader:'',fragmentShader:''};material.onBeforeCompile(shader);
+ for(const highlight of ['magenta','lime','cyan']){
+  h.mount(atlas,{...state,highlight});h.frame();
+  assert.ok(shader.uniforms.selectionDisplayAccent.value.equals(new Three.Color(anatomy.HIGHLIGHTS[highlight]).convertLinearToSRGB()));
+  assert.ok(position.equals(h.owners[0].camera.position));
+  assert.equal(h.host.dataset.highlightedParts,'1');assert.equal(h.host.dataset.visibleParts,'2');
+ }
+ assert.equal(h.owners.length,1);assert.equal(h.requests.length,2);
 });

@@ -7,6 +7,7 @@ import path from 'node:path';
 import {createPrivateServer,runtimeConfig,parseRange,gitBlobSha} from '../server/private-runtime.mjs';
 import {createCourseFixture} from './course-fixture.mjs';
 import {courseSourceUrl} from '../app/course-navigation.ts';
+import {spaceoRoute,validateSpaceOPath,validateCourseOverlay} from '../app/course.ts';
 
 const PDF = Buffer.from('%PDF-1.4\nSynthetic PDF bytes for range checks only.\n');
 async function fixture(t,{enabled = true,mutate} = {}) {
@@ -22,6 +23,7 @@ async function fixture(t,{enabled = true,mutate} = {}) {
   await writeFile(path.join(distRoot,'index.html'),'<!doctype html><title>Synthetic explorer</title>');
   await writeFile(path.join(distRoot,'assets','app-test.js'),'console.log("synthetic")');
   await writeFile(courseFile,JSON.stringify(data.course));
+  await mkdir(path.dirname(path.join(spaceoRoot,data.binding.courseSource.path)),{recursive:true});
   await writeFile(path.join(spaceoRoot,data.binding.courseSource.path),PDF);
   await writeFile(path.join(spaceoRoot,data.binding.figures[0].path),'Synthetic image bytes');
   await writeFile(path.join(spaceoRoot,data.binding.capture.path),'Synthetic original capture');
@@ -156,4 +158,38 @@ test('exact encoded binding keys round-trip from the shared source helper',async
     assert.ok(route.endsWith('#page=7'));
     const response=await fetch(f.url+route);assert.equal(response.status,200,id);assert.deepEqual(Buffer.from(await response.arrayBuffer()),PDF);
   }
+});
+
+
+test('registered exported books reuse private PDF GET/HEAD/ranges without exposing a directory', async t => {
+  const exportedPath = 'Exports/Synthetic course/Book.pdf';
+  const f = await fixture(t,{mutate:data=>{
+    data.binding.courseSource.path = exportedPath;
+    data.binding.courseSource.page = 337;
+    data.binding.courseSource.route = spaceoRoute(exportedPath,{page:337});
+  }});
+  assert.equal((await fetch(`${f.url}/api/course`)).status,200);
+  const url = `${f.url}/api/course/sources/sample/pdf`;
+  const head = await fetch(url,{method:'HEAD'});
+  assert.equal(head.status,200); assert.equal(Number(head.headers.get('content-length')),PDF.length);
+  const range = await fetch(url,{headers:{Range:'bytes=0-4'}});
+  assert.equal(range.status,206); assert.equal(await range.text(),'%PDF-');
+  const full = await fetch(url); assert.deepEqual(Buffer.from(await full.arrayBuffer()),PDF);
+  for (const route of ['/Exports/Synthetic%20course/Book.pdf','/api/course/sources/unregistered/pdf','/Exports/']) {
+    assert.equal((await fetch(f.url+route)).status,404);
+  }
+});
+
+test('Exports exception is PDF-binding only and never relaxes note, capture or traversal validation', () => {
+  assert.throws(()=>validateSpaceOPath('Exports/Synthetic/Book.pdf'));
+  for (const bad of ['Exports/../secret.pdf','Exports//Book.pdf','Exports/Synthetic/Book.txt','Other/Book.pdf']) {
+    assert.throws(()=>validateSpaceOPath(bad,true),bad);
+  }
+  for (const kind of ['note','capture']) {
+    const f=createCourseFixture();
+    f.binding[kind].path='Exports/Synthetic/Book.pdf';
+    assert.throws(()=>validateCourseOverlay(f.course,f.atlas,f.catalogBlobSha));
+  }
+  const f=createCourseFixture(); f.binding.figures[0].path='Exports/Synthetic/image.png';
+  assert.throws(()=>validateCourseOverlay(f.course,f.atlas,f.catalogBlobSha));
 });

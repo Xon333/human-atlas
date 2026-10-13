@@ -247,6 +247,7 @@ export async function createPrivateServer(options = {}) {
         catch (error) { reportError(error); errorResponse(res,404,'SOURCE_UNAVAILABLE',req.method==='HEAD'); return; }
         await sendFile(req,res,file,true); return;
       }
+      if (/^\/(?:Notes|Exports)(?:\/|$)/.test(pathname)) { privateHeaders(res); errorResponse(res,404,'NOT_FOUND',req.method==='HEAD'); return; }
       if (pathname.startsWith('/api/')) { privateHeaders(res); errorResponse(res,404,'NOT_FOUND',req.method==='HEAD'); return; }
       if (pathname.split('/').some(piece=>piece.startsWith('.'))) { errorResponse(res,404,'NOT_FOUND',req.method==='HEAD'); return; }
       let relative = pathname === '/' ? 'index.html' : pathname.slice(1);

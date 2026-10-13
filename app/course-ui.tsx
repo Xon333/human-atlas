@@ -7,6 +7,7 @@ import type {Part, Concept} from './anatomy';
 import {partSide, hasSourceSideConflict, type StudySide, type StudyLayer} from './study-region';
 import type {CourseOverlay, CourseLinks, CourseConcept, CourseSelection, UnmappedObjective, Evidence, Laterality} from './course';
 import {RegionControls} from './region-controls';
+import {matchesSearch,sourcePdfLabel} from './search';
 import {obsidianUrl, spaceoSourceUrl} from './course-navigation';
 
 const SIDES: Record<Laterality, string> = {right: 'Desno', left: 'Levo', bilateral: 'Obe strani', midline: 'Sredinska'};
@@ -29,16 +30,22 @@ export function CoursePanel({course, selectionId, objectiveId, mobileOpen, onClo
   course: CourseOverlay; selectionId?: string; objectiveId?: string; mobileOpen: boolean;
   onClose: () => void; onSelection: (selection: CourseSelection) => void; onObjective: (objective: UnmappedObjective) => void;
 }) {
+  const [query, setQuery] = useState('');
+  const terms = new Map(course.concepts.map(term => [term.id, term]));
+  const selections = course.selections.filter(selection => matchesSearch(query, [selection.label, selection.region?.label, selection.id, ...selection.conceptIds.flatMap(id => {const term = terms.get(id); return term ? [term.labels.sl, term.labels.la, term.name, term.id] : [];})]));
+  const objectives = course.unmappedObjectives.filter(objective => matchesSearch(query, [objective.shortLabel, objective.labels.sl, objective.labels.la, objective.id]));
   return <section className={`course-panel glass ${mobileOpen ? 'mobile-open' : ''}`} aria-label="Predeli" lang="sl">
     <div className="panel-heading"><span><BookOpen size={16}/> Predeli</span><Badge variant="secondary">{course.selections.length}</Badge><Button variant="ghost" className="course-mobile-close icon-button" onClick={onClose} aria-label="Zapri izbore"><X size={18}/></Button></div>
+    <label className="course-search">Poišči predel ali strukturo<input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Ime, latinsko ime ali ID"/></label>
+    {query && <p className="course-search-status" role="status">{selections.length} predelov · {objectives.length} ciljev v viru</p>}
     <div className="course-panel-scroll">
-      <nav className="course-selection-list" aria-label="Anatomski izbori">{course.selections.map((selection, index) => <Button variant="ghost" key={selection.id} aria-pressed={selectionId === selection.id && !objectiveId} onClick={() => onSelection(selection)}>
-        <span className="course-index">{String(index + 1).padStart(2, '0')}</span><span>{selection.region?.label ?? selection.label}</span><ChevronRight size={14}/>
+      <nav className="course-selection-list" aria-label="Anatomski izbori">{selections.map((selection) => <Button variant="ghost" key={selection.id} aria-pressed={selectionId === selection.id && !objectiveId} onClick={() => onSelection(selection)}>
+        <span className="course-index">{String(course.selections.indexOf(selection) + 1).padStart(2, '0')}</span><span>{selection.region?.label ?? selection.label}</span><ChevronRight size={14}/>
       </Button>)}</nav>
-      {course.unmappedObjectives.length > 0 && <details className="unmapped-list" open={objectiveId ? true : undefined}>
-        <summary>Prepoznaj v viru <Badge variant="outline">{course.unmappedObjectives.length}</Badge></summary>
+      {objectives.length > 0 && <details className="unmapped-list" open={objectiveId || query ? true : undefined}>
+        <summary>Prepoznaj v viru <Badge variant="outline">{objectives.length}</Badge></summary>
         
-        {course.unmappedObjectives.map(objective => <Button variant="ghost" key={objective.id} aria-pressed={objective.id === objectiveId} onClick={() => onObjective(objective)}><span>{objective.shortLabel || objective.labels.sl}<small lang="la">{objective.labels.la}</small></span><ArrowUpRight size={14}/></Button>)}
+        {objectives.map(objective => <Button variant="ghost" key={objective.id} aria-pressed={objective.id === objectiveId} onClick={() => onObjective(objective)}><span>{objective.shortLabel || objective.labels.sl}<small lang="la">{objective.labels.la}</small></span><ArrowUpRight size={14}/></Button>)}
       </details>}
     </div>
     <details className="course-scope"><summary>O gradivu</summary><p>{course.scopeNote}</p></details>
@@ -60,7 +67,7 @@ function SourceLinks({course, links, ids}: {course: CourseOverlay; links: Course
         <div className="course-source-actions">
           {native && <a href={native}><BookOpen size={13}/> Zapisek</a>}
           {browser && <a href={browser} target="_blank" rel="noreferrer">{native ? 'Zapisek v brskalniku' : 'Zapisek'} <ArrowUpRight size={12}/></a>}
-          <a href={`${base}/pdf#page=${binding.courseSource.page}`} target="_blank" rel="noreferrer">PDF · {binding.courseSource.page}<ArrowUpRight size={12}/></a>
+          <a href={`${base}/pdf#page=${binding.courseSource.page}`} target="_blank" rel="noreferrer">{sourcePdfLabel(binding.courseSource.path, binding.courseSource.page)}<ArrowUpRight size={12}/></a>
           {binding.figures.map((figure, index) => <a href={`${base}/figure/${index}`} key={figure.path} target="_blank" rel="noreferrer">Slika{binding.figures.length > 1 ? ` ${index + 1}` : ''}{figure.laterality ? ` · ${SIDES[figure.laterality].toLowerCase()}` : ''}<ArrowUpRight size={12}/></a>)}
           {binding.capture && <a className="capture-link" href={`${base}/capture`} target="_blank" rel="noreferrer">Prvotni zapis <ArrowUpRight size={12}/></a>}
         </div>
@@ -79,6 +86,8 @@ export function CourseInspector({course, links, selection, term, objective, mesh
   onSelection: (selection: CourseSelection) => void; onContext: () => void; onIsolate: () => void;
 }) {
   const heading = useRef<HTMLHeadingElement>(null), list = useRef<HTMLOListElement>(null);
+  const [query, setQuery] = useState('');
+  useEffect(() => setQuery(''), [selection?.id, objective?.id]);
   const terms = new Map(course.concepts.map(item => [item.id, item]));
   const scope = new Set(scopeElements ?? selection?.elements ?? []), selected = new Set(selectedIds);
   const title = objective ? (objective.shortLabel || objective.labels.sl) : selection?.region?.label ?? selection?.label;
@@ -95,6 +104,7 @@ export function CourseInspector({course, links, selection, term, objective, mesh
   }
   const other = [...scope].filter(id => !claimed.has(id)).map(id => parts.get(id)).filter((part):part is Part => !!part).sort((a,b) => a.name.localeCompare(b.name,'en',{numeric:true}));
   for (const part of other) rows.push({id:part.id, label:part.name, english:part.name, elements:[part.id], part});
+  const filteredRows = rows.filter(row => matchesSearch(query, [row.label, row.latin, row.english, row.id, ...row.elements]));
   useEffect(() => {
     const current = list.current?.querySelector<HTMLElement>('[aria-pressed="true"]');
     current?.scrollIntoView({block:'nearest', inline:'nearest'});
@@ -122,9 +132,11 @@ export function CourseInspector({course, links, selection, term, objective, mesh
           <div className={`region-selection${pickedSideConflict ? ' source-side-conflict' : ''}`} role="status" aria-live="polite">
             {pickedName ? <><strong>{pickedName}</strong>{pickedSideConflict ? <span className="picked-side">Neskladna oznaka strani v viru</span> : pickedSide && <span className="picked-side">{SIDES[pickedSide]}</span>}<small>{isolate ? 'Samo izbrano' : 'Označeno v predelu'}</small>{term?.labels.la && <small lang="la">{term.labels.la}</small>}</> : <span>{scope.size} struktur · sestavljen predel</span>}
           </div>
-          <ol className="course-terms" ref={list} aria-label="Strukture v predelu">{rows.map((row,index) => <li key={row.id}>
+          <label className="course-search">Poišči v vidnem predelu<input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Ime, latinsko ime ali ID"/></label>
+          {query && <p className="course-search-status" role="status">{filteredRows.length} / {rows.length} struktur · filter ne spremeni 3D izbora</p>}
+          <ol className="course-terms" ref={list} aria-label="Strukture v predelu">{filteredRows.map((row) => <li key={row.id}>
             <Button variant="ghost" aria-pressed={row.elements.some(id => selected.has(id))} data-mesh={row.part?.id} data-course-term={row.term ? 'true' : 'false'} title={row.term ? `${row.english} · oznaka iz gradiva` : `${row.english} · izvorno ime v atlasu, brez potrjene oznake iz gradiva`} onClick={() => row.term ? onTerm(row.term) : onPart(row.part!.id)}>
-              <span className="course-index">{index + 1}</span><span className="course-term-name"><strong lang={row.term ? 'sl' : 'en'}>{row.label}</strong>{row.latin && <span lang="la">{row.latin}</span>}</span>{row.term && <span className="course-source-dot" aria-label="V gradivu"/>}
+              <span className="course-index">{rows.indexOf(row) + 1}</span><span className="course-term-name"><strong lang={row.term ? 'sl' : 'en'}>{row.label}</strong>{row.latin && <span lang="la">{row.latin}</span>}</span>{row.term && <span className="course-source-dot" aria-label="V gradivu"/>}
             </Button>
           </li>)}</ol>
           <div className="region-legend"><span className="course-source-dot"/> Iz gradiva · ostalo: izvorna imena</div>
