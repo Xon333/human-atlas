@@ -113,14 +113,14 @@ function httpsUrl(value: unknown, context: string): string {
 export function encodeCourseText(value: string): string {
   return encodeURIComponent(value).replace(/[!'()*]/g, char => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
 }
-export function validateSpaceOPath(value: unknown): string {
+export function validateSpaceOPath(value: unknown, exportedPdf = false): string {
   const path = text(value, 'SpaceO path');
   const parts = path.split('/');
-  requireValue(parts.length > 1 && parts[0] === 'Notes' && !path.includes('\\') && !/[\u0000-\u001f\u007f]/u.test(path) && parts.every(part => part !== '' && part !== '.' && part !== '..'), 'SpaceO path: expected a relative file beneath Notes/');
+  requireValue(parts.length > 1 && (parts[0] === 'Notes' || (exportedPdf && parts[0] === 'Exports' && path.toLowerCase().endsWith('.pdf'))) && !path.includes('\\') && !/[\u0000-\u001f\u007f]/u.test(path) && parts.every(part => part !== '' && part !== '.' && part !== '..'), 'SpaceO path: expected a canonical Notes file or registered Exports PDF');
   return path;
 }
 export function spaceoRoute(path: string, options: { heading?: string; page?: number } = {}): string {
-  validateSpaceOPath(path);
+  validateSpaceOPath(path, options.page !== undefined);
   requireValue(!(options.heading !== undefined && options.page !== undefined), 'A source route cannot have both a heading and a page');
   let route = path.split('/').map(encodeCourseText).join('/');
   if (options.heading !== undefined) route += `#${encodeCourseText(text(options.heading, 'Source heading'))}`;
@@ -132,7 +132,7 @@ export function spaceoRoute(path: string, options: { heading?: string; page?: nu
 }
 function source(value: unknown, context: string, kind: 'note' | 'pdf' | 'figure' | 'capture'): SourceFile | NoteSource | PdfSource | FigureSource {
   const item = object(value, context);
-  const path = validateSpaceOPath(item.path);
+  const path = validateSpaceOPath(item.path, kind === 'pdf');
   const result: SourceFile = { path, route: text(item.route, `${context}.route`) };
   if (kind === 'note') {
     requireValue(path.endsWith('.md'), `${context}: expected Markdown`);
