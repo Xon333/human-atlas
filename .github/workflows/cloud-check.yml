@@ -39,7 +39,7 @@ jobs:
             test "$GITHUB_REF_NAME" = codex/atlas-cloud-2026-10-13
             git diff --check
             git rm scripts/cloud-implementation.patch
-            git add app/course-client.ts app/course-ui.tsx app/model-download.ts app/page.tsx app/search.ts app/study-layout.css package.json scripts/search.test.mjs .github/workflows/regional-review.yml
+            git add app/course-client.ts app/course-ui.tsx app/model-download.ts app/page.tsx app/search.ts app/study-layout.css package.json scripts/search.test.mjs
             git -c user.name='Atlas cloud implementation' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'feat: searchable regional course and bounded decoding allocation'
             git push origin "HEAD:$GITHUB_REF_NAME"
           fi
