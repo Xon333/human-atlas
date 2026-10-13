@@ -1,0 +1,207 @@
+diff --git a/.github/workflows/regional-review.yml b/.github/workflows/regional-review.yml
+index 2f899b6..d66043e 100644
+--- a/.github/workflows/regional-review.yml
++++ b/.github/workflows/regional-review.yml
+@@ -28,2 +28,3 @@ jobs:
+           npm run check
++          npm run test:search
+           npm run test:course
+diff --git a/app/course-client.ts b/app/course-client.ts
+index 53b854d..2d6ac1c 100644
+--- a/app/course-client.ts
++++ b/app/course-client.ts
+@@ -39,2 +39,3 @@ export function usePrivateCourse(atlas: Atlas | null, catalogue: string) {
+         const response = await fetch('/api/course', {signal: abort.signal, cache: 'no-store', credentials: 'same-origin'});
++        abort.signal.throwIfAborted();
+         if (response.status === 404) {setStatus('unavailable'); return;}
+diff --git a/app/course-ui.tsx b/app/course-ui.tsx
+index c70e048..b68a9e2 100644
+--- a/app/course-ui.tsx
++++ b/app/course-ui.tsx
+@@ -9,2 +9,3 @@ import type {CourseOverlay, CourseLinks, CourseConcept, CourseSelection, Unmappe
+ import {RegionControls} from './region-controls';
++import {matchesSearch,sourcePdfLabel} from './search';
+ import {obsidianUrl, spaceoSourceUrl} from './course-navigation';
+@@ -31,12 +32,18 @@ export function CoursePanel({course, selectionId, objectiveId, mobileOpen, onClo
+ }) {
++  const [query, setQuery] = useState('');
++  const terms = new Map(course.concepts.map(term => [term.id, term]));
++  const selections = course.selections.filter(selection => matchesSearch(query, [selection.label, selection.region?.label, selection.id, ...selection.conceptIds.flatMap(id => {const term = terms.get(id); return term ? [term.labels.sl, term.labels.la, term.name, term.id] : [];})]));
++  const objectives = course.unmappedObjectives.filter(objective => matchesSearch(query, [objective.shortLabel, objective.labels.sl, objective.labels.la, objective.id]));
+   return <section className={`course-panel glass ${mobileOpen ? 'mobile-open' : ''}`} aria-label="Predeli" lang="sl">
+     <div className="panel-heading"><span><BookOpen size={16}/> Predeli</span><Badge variant="secondary">{course.selections.length}</Badge><Button variant="ghost" className="course-mobile-close icon-button" onClick={onClose} aria-label="Zapri izbore"><X size={18}/></Button></div>
++    <label className="course-search">Poišči predel ali strukturo<input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Ime, latinsko ime ali ID"/></label>
++    {query && <p className="course-search-status" role="status">{selections.length} predelov · {objectives.length} ciljev v viru</p>}
+     <div className="course-panel-scroll">
+-      <nav className="course-selection-list" aria-label="Anatomski izbori">{course.selections.map((selection, index) => <Button variant="ghost" key={selection.id} aria-pressed={selectionId === selection.id && !objectiveId} onClick={() => onSelection(selection)}>
+-        <span className="course-index">{String(index + 1).padStart(2, '0')}</span><span>{selection.region?.label ?? selection.label}</span><ChevronRight size={14}/>
++      <nav className="course-selection-list" aria-label="Anatomski izbori">{selections.map((selection) => <Button variant="ghost" key={selection.id} aria-pressed={selectionId === selection.id && !objectiveId} onClick={() => onSelection(selection)}>
++        <span className="course-index">{String(course.selections.indexOf(selection) + 1).padStart(2, '0')}</span><span>{selection.region?.label ?? selection.label}</span><ChevronRight size={14}/>
+       </Button>)}</nav>
+-      {course.unmappedObjectives.length > 0 && <details className="unmapped-list" open={objectiveId ? true : undefined}>
+-        <summary>Prepoznaj v viru <Badge variant="outline">{course.unmappedObjectives.length}</Badge></summary>
++      {objectives.length > 0 && <details className="unmapped-list" open={objectiveId || query ? true : undefined}>
++        <summary>Prepoznaj v viru <Badge variant="outline">{objectives.length}</Badge></summary>
+         
+-        {course.unmappedObjectives.map(objective => <Button variant="ghost" key={objective.id} aria-pressed={objective.id === objectiveId} onClick={() => onObjective(objective)}><span>{objective.shortLabel || objective.labels.sl}<small lang="la">{objective.labels.la}</small></span><ArrowUpRight size={14}/></Button>)}
++        {objectives.map(objective => <Button variant="ghost" key={objective.id} aria-pressed={objective.id === objectiveId} onClick={() => onObjective(objective)}><span>{objective.shortLabel || objective.labels.sl}<small lang="la">{objective.labels.la}</small></span><ArrowUpRight size={14}/></Button>)}
+       </details>}
+@@ -62,3 +69,3 @@ function SourceLinks({course, links, ids}: {course: CourseOverlay; links: Course
+           {browser && <a href={browser} target="_blank" rel="noreferrer">{native ? 'Zapisek v brskalniku' : 'Zapisek'} <ArrowUpRight size={12}/></a>}
+-          <a href={`${base}/pdf#page=${binding.courseSource.page}`} target="_blank" rel="noreferrer">PDF · {binding.courseSource.page}<ArrowUpRight size={12}/></a>
++          <a href={`${base}/pdf#page=${binding.courseSource.page}`} target="_blank" rel="noreferrer">{sourcePdfLabel(binding.courseSource.path, binding.courseSource.page)}<ArrowUpRight size={12}/></a>
+           {binding.figures.map((figure, index) => <a href={`${base}/figure/${index}`} key={figure.path} target="_blank" rel="noreferrer">Slika{binding.figures.length > 1 ? ` ${index + 1}` : ''}{figure.laterality ? ` · ${SIDES[figure.laterality].toLowerCase()}` : ''}<ArrowUpRight size={12}/></a>)}
+@@ -81,2 +88,4 @@ export function CourseInspector({course, links, selection, term, objective, mesh
+   const heading = useRef<HTMLHeadingElement>(null), list = useRef<HTMLOListElement>(null);
++  const [query, setQuery] = useState('');
++  useEffect(() => setQuery(''), [selection?.id, objective?.id]);
+   const terms = new Map(course.concepts.map(item => [item.id, item]));
+@@ -97,2 +106,3 @@ export function CourseInspector({course, links, selection, term, objective, mesh
+   for (const part of other) rows.push({id:part.id, label:part.name, english:part.name, elements:[part.id], part});
++  const filteredRows = rows.filter(row => matchesSearch(query, [row.label, row.latin, row.english, row.id, ...row.elements]));
+   useEffect(() => {
+@@ -124,5 +134,7 @@ export function CourseInspector({course, links, selection, term, objective, mesh
+           </div>
+-          <ol className="course-terms" ref={list} aria-label="Strukture v predelu">{rows.map((row,index) => <li key={row.id}>
++          <label className="course-search">Poišči v vidnem predelu<input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Ime, latinsko ime ali ID"/></label>
++          {query && <p className="course-search-status" role="status">{filteredRows.length} / {rows.length} struktur · filter ne spremeni 3D izbora</p>}
++          <ol className="course-terms" ref={list} aria-label="Strukture v predelu">{filteredRows.map((row) => <li key={row.id}>
+             <Button variant="ghost" aria-pressed={row.elements.some(id => selected.has(id))} data-mesh={row.part?.id} data-course-term={row.term ? 'true' : 'false'} title={row.term ? `${row.english} · oznaka iz gradiva` : `${row.english} · izvorno ime v atlasu, brez potrjene oznake iz gradiva`} onClick={() => row.term ? onTerm(row.term) : onPart(row.part!.id)}>
+-              <span className="course-index">{index + 1}</span><span className="course-term-name"><strong lang={row.term ? 'sl' : 'en'}>{row.label}</strong>{row.latin && <span lang="la">{row.latin}</span>}</span>{row.term && <span className="course-source-dot" aria-label="V gradivu"/>}
++              <span className="course-index">{rows.indexOf(row) + 1}</span><span className="course-term-name"><strong lang={row.term ? 'sl' : 'en'}>{row.label}</strong>{row.latin && <span lang="la">{row.latin}</span>}</span>{row.term && <span className="course-source-dot" aria-label="V gradivu"/>}
+             </Button>
+diff --git a/app/model-download.ts b/app/model-download.ts
+index fcc6100..3bd0c28 100644
+--- a/app/model-download.ts
++++ b/app/model-download.ts
+@@ -16,3 +16,5 @@ export async function decodeModelResponse(response:Response,expectedBytes:number
+  const cancel=()=>{void reader.cancel(signal?.reason).catch(()=>{});};
+- const pieces:Uint8Array[]=[];let length=0;
++ // Fill the final allocation directly; do not retain every decoded chunk and
++ // then duplicate the entire region buffer at the end of decompression.
++ const buffer=new ArrayBuffer(expectedBytes),bytes=new Uint8Array(buffer);let length=0;
+  signal?.addEventListener('abort',cancel,{once:true});
+@@ -21,12 +23,9 @@ export async function decodeModelResponse(response:Response,expectedBytes:number
+    const {done,value}=await reader.read();signal?.throwIfAborted();if(done)break;
+-   length+=value.byteLength;
+-   if(length>expectedBytes)throw new Error('An anatomy file was incomplete. Please reload the viewer.');
+-   pieces.push(value);
++   if(length+value.byteLength>expectedBytes)throw new Error('An anatomy file was incomplete. Please reload the viewer.');
++   bytes.set(value,length);length+=value.byteLength;
+   }
+   if(length!==expectedBytes)throw new Error('An anatomy file was incomplete. Please reload the viewer.');
+-  const buffer=new ArrayBuffer(length),bytes=new Uint8Array(buffer);let offset=0;
+-  for(const piece of pieces){bytes.set(piece,offset);offset+=piece.byteLength;}
+   return buffer;
+  }finally{
+-  signal?.removeEventListener('abort',cancel);pieces.length=0;
++  signal?.removeEventListener('abort',cancel);
+   await reader.cancel().catch(()=>{});reader.releaseLock();
+diff --git a/app/page.tsx b/app/page.tsx
+index 08c7f48..f06182e 100644
+--- a/app/page.tsx
++++ b/app/page.tsx
+@@ -14,2 +14,3 @@ import {DEFAULT_VISIBLE,SYSTEMS,EXPLANATIONS,explanation,type Atlas,type Concept
+ import {usePrivateCourse} from './course-client';
++import {matchesSearch,normalizeSearchText,searchRank} from './search';
+ import {CourseInspector,CoursePanel,CopySceneLink} from './course-ui';
+@@ -45,4 +46,3 @@ export default function Home(){
+   if(!atlas)return[];
+-  const normalize=(value:string)=>value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+-  const queryText=normalize(query).trim(),scope=new Set(publicRegion?.elements??courseSelection?.region?.elements??courseSelection?.elements??[]);
++  const queryText=normalizeSearchText(query),scope=new Set(publicRegion?.elements??courseSelection?.region?.elements??courseSelection?.elements??[]);
+   const inRegion=(c:Concept)=>c.elements.length>0&&c.elements.every(id=>scope.has(id));
+@@ -53,4 +53,4 @@ export default function Home(){
+    const alias=courseTerms.get(c.id);
+-   return normalize([c.name,c.id,alias?.labels.sl,alias?.labels.la].filter(Boolean).join(' ')).includes(queryText);
+-  }).sort((a,b)=>Number(regional&&inRegion(b))-Number(regional&&inRegion(a))||Number(regional&&inView(b))-Number(regional&&inView(a))||Number(courseMode&&courseTerms.has(b.id))-Number(courseMode&&courseTerms.has(a.id))||a.name.length-b.name.length).slice(0,80);
++   return matchesSearch(queryText,[alias?.labels.sl,alias?.labels.la,c.name,c.id]);
++  }).sort((a,b)=>Number(regional&&inRegion(b))-Number(regional&&inRegion(a))||Number(regional&&inView(b))-Number(regional&&inView(a))||Number(courseMode&&courseTerms.has(b.id))-Number(courseMode&&courseTerms.has(a.id))||searchRank(queryText,[courseTerms.get(a.id)?.labels.sl,courseTerms.get(a.id)?.labels.la,a.name,a.id])-searchRank(queryText,[courseTerms.get(b.id)?.labels.sl,courseTerms.get(b.id)?.labels.la,b.name,b.id])||a.name.length-b.name.length).slice(0,80);
+  },[atlas,query,courseMode,regional,publicRegion,courseSelection,courseTerms,state.scope]);
+diff --git a/app/search.ts b/app/search.ts
+new file mode 100644
+index 0000000..76b215e
+--- /dev/null
++++ b/app/search.ts
+@@ -0,0 +1,26 @@
++/** Search only existing labels/identities; this is not a second terminology store. */
++export function normalizeSearchText(value: string): string {
++  return value.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase()
++    .replace(/[^\p{L}\p{N}]+/gu, ' ').trim().replace(/\s+/g, ' ');
++}
++
++export function matchesSearch(query: string, values: readonly (string | undefined)[]): boolean {
++  const tokens = normalizeSearchText(query).split(' ').filter(Boolean);
++  const text = normalizeSearchText(values.filter(Boolean).join(' '));
++  return tokens.every(token => text.includes(token));
++}
++
++/** Rank exact preferred/Latin/English names ahead of broader substring matches. */
++export function searchRank(query: string, values: readonly (string | undefined)[]): number {
++  const normalized = normalizeSearchText(query);
++  if (!normalized) return 2;
++  const labels = values.filter((value): value is string => !!value).map(normalizeSearchText);
++  if (labels.some(value => value === normalized)) return 0;
++  return labels.some(value => value.startsWith(normalized)) ? 1 : 2;
++}
++
++/** Physical PDF page, not the book's printed page number. No URL/path is inferred. */
++export function sourcePdfLabel(path: string, page: number): string {
++  const filename = path.split('/').pop()!.replace(/\.pdf$/i, '');
++  return `${filename} · fizična str. ${page}`;
++}
+diff --git a/app/study-layout.css b/app/study-layout.css
+index f0a049e..203dd0d 100644
+--- a/app/study-layout.css
++++ b/app/study-layout.css
+@@ -127 +127,10 @@
+ @media (max-width: 767px) { .limb-groups { gap: 18px; } .limb-groups nav { grid-template-columns: 1fr; } .limb-groups a, .limb-groups summary, .surface-entry a { min-height: 44px; } }
++
++/* Text filtering never changes geometry, the active selection or authored order. */
++.course-search { display: grid; gap: 6px; margin: 12px 14px; font-size: 11px; color: var(--muted-foreground); }
++.course-search input { min-width: 0; width: 100%; padding: 9px 10px; border: 1px solid var(--input); border-radius: 6px; background: var(--background); color: var(--foreground); font: inherit; font-size: 13px; }
++.course-search input:focus-visible { outline: 2px solid var(--highlight, #00e5ff); outline-offset: 2px; }
++.course-detail .course-search { margin: 12px 0; }
++.course-search-status { margin: 4px 14px 10px; color: var(--muted-foreground); font-size: 11px; }
++.course-detail .course-search-status { margin-inline: 0; }
++.course-source-actions a { overflow-wrap: anywhere; }
+diff --git a/package.json b/package.json
+index cb377c0..186020e 100644
+--- a/package.json
++++ b/package.json
+@@ -13,2 +13,3 @@
+     "serve:private": "node --experimental-strip-types server/private-runtime.mjs",
++    "test:search": "node --experimental-strip-types --test scripts/search.test.mjs",
+     "test:runtime": "node --experimental-strip-types --test scripts/private-runtime.test.mjs scripts/private-build-guard.test.mjs",
+diff --git a/scripts/search.test.mjs b/scripts/search.test.mjs
+new file mode 100644
+index 0000000..2497239
+--- /dev/null
++++ b/scripts/search.test.mjs
+@@ -0,0 +1,26 @@
++import assert from 'node:assert/strict';
++import {test} from 'node:test';
++import {matchesSearch, normalizeSearchText, searchRank, sourcePdfLabel} from '../app/search.ts';
++
++test('search accepts preferred, exact Latin, English and unchanged identifiers', () => {
++  const values = ['Primer mišice', 'm. example anterior', 'right example anterior', 'FMA0001'];
++  for (const query of ['misice', 'MIŠICE', 'm example', 'anterior example', 'right anterior', 'FMA0001']) {
++    assert.equal(matchesSearch(query, values), true, query);
++  }
++  for (const query of ['posterior', 'FMA0002', 'left example']) assert.equal(matchesSearch(query, values), false, query);
++});
++test('blank and punctuation-only queries do not hide regional structures', () => {
++  for (const query of ['', '  ', '.']) assert.equal(matchesSearch(query, ['a']), true);
++  assert.equal(normalizeSearchText('  M. EXAMPLE—č  '), 'm example c');
++});
++test('exact and prefix names rank before related structures without modifying source names', () => {
++  assert.equal(searchRank('Example', ['example']), 0);
++  assert.equal(searchRank('example', ['example minor']), 1);
++  assert.equal(searchRank('example', ['right example']), 2);
++  const labels = ['M. Example']; matchesSearch('m example', labels);
++  assert.deepEqual(labels, ['M. Example']);
++});
++test('source labels distinguish book/lecture and retain physical page numbers', () => {
++  assert.equal(sourcePdfLabel('private/Reference Book.pdf', 337), 'Reference Book · fizična str. 337');
++  assert.equal(sourcePdfLabel('private/Lecture.PDF', 54), 'Lecture · fizična str. 54');
++});
