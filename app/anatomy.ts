@@ -20,8 +20,10 @@ export interface Part {id:string;name:string;conceptId:string;system:SystemId;ch
 export interface Concept {id:string;name:string;elements:string[]}
 export interface AtlasRegion {id:string;label:string;description?:string;conceptIds?:string[];elements:string[]}
 export interface Atlas {version:string;sex?:'male';source?:string;scope?:string;parts:Part[];concepts:Concept[];chunks:{url:string;bytes:number;gzip?:string;gzipBytes?:number;regionIds?:string[];ownerRegionId?:string;side?:'right'|'left'|'shared';sha256?:string}[];triangles:number;regions?:AtlasRegion[];geometryPartition?:{version:1;sourceCatalogSha256:string;sourceGeometrySha256:string;geometrySha256:string;geometryBytes:number;partCount:number;chunkTargetBytes:number;rules:Record<string,unknown>;limitations:string[]}}
-export type View = 'three-quarter'|'front'|'back'|'side';
-export interface SceneState {inspectorOpen?:boolean;scope?:string[];context?:string[];explode:number;visible:SystemId[];selected:string[];isolate:boolean;view:View;rotate:boolean;reset:number}
+import type {View} from './camera-views';
+export type {View} from './camera-views';
+export const HIGHLIGHTS = {cyan:'#00e5ff',magenta:'#ff3df2',lime:'#c6ff00'} as const;
+export interface SceneState {highlight?:keyof typeof HIGHLIGHTS;inspectorOpen?:boolean;scope?:string[];context?:string[];explode:number;visible:SystemId[];selected:string[];isolate:boolean;view:View;rotate:boolean;reset:number}
 export const DEFAULT_VISIBLE:SystemId[] = ['cardiac','sensory','skeletal','muscular','arterial','venous','nervous','respiratory','digestive','urinary','lymphatic','endocrine','reproductive','connective'];
 export const EXPLANATIONS:Record<string,string> = {
  'heart':'A muscular pump in the chest. Its right side sends blood to the lungs; its left side sends blood through the systemic circulation.',

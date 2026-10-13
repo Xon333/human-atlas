@@ -3,6 +3,7 @@ import {test} from 'node:test';
 import {readFile} from 'node:fs/promises';
 import ts from 'typescript';
 import {parseAtlasLink, serializeAtlasLink, resolveAtlasLink, resolveAtlasRoute, publicTargetLink} from '../app/course-navigation.ts';
+import {CAMERA_VIEWS,cameraViewOptions,defaultStudyView} from '../app/camera-views.ts';
 import {regionForElements} from '../app/atlas-regions.ts';
 import {createCourseFixture} from './course-fixture.mjs';
 
@@ -151,4 +152,26 @@ test('scene imports are lazy and default/error render exits before the scene JSX
  assert.ok(page.indexOf('if(!sceneReady)return <RegionChooser')<page.indexOf('<AnatomyScene'));
  assert.match(page,/scope:resolved\.scopeElements\?\?\(next\.objectiveId\?\[\]:undefined\)/,'Unmapped source objectives must not initialize complete-body geometry');
  assert.match(page,/resolveAtlasRoute\(location\.hash,atlas,course,privateCourse\.status\)/);
+});
+
+test('all anatomical camera views round-trip in regional and course links',()=>{
+ for(const view of Object.keys(CAMERA_VIEWS)) for(const link of [
+  {mode:'region',regionId:'hand',side:'right',view},
+  {mode:'course',courseId:'spaceo-uni-anatomija',selectionId:'synthetic',view},
+  {mode:'explorer',view},
+ ]) assert.deepEqual(parseAtlasLink(serializeAtlasLink(link)),link);
+ assert.throws(()=>parseAtlasLink('#region=hand&view=transverse'));
+});
+test('surface names follow regional membership and anatomical side',()=>{
+ const labels=(scope,side)=>Object.fromEntries(cameraViewOptions(atlas,scope,side).map(view=>[view.id,view.en]));
+ const right=labels(['hand-right'],'right'),left=labels(['hand-left'],'left');
+ assert.equal(defaultStudyView(atlas,['foot-right']),'superior');
+ assert.equal(defaultStudyView(atlas,['hand-right']),'front');
+ assert.equal(right['right-side'],'Lateral');assert.equal(left['right-side'],'Medial');
+ assert.equal(right.side,'Medial');assert.equal(left.side,'Lateral');
+ assert.equal(right.front,'Palmar · anterior');assert.equal(right.back,'Dorsal · posterior');
+ assert.equal(labels(['foot-right'],'right').superior,'Dorsal · superior');
+ assert.equal(labels(['foot-right'],'right').inferior,'Plantar · inferior');
+ assert.equal(labels(['arm-right','hand-right'],'right').front,'Anterior');
+ assert.equal(labels(['hand-right','hand-left'],'both').side,'From left');
 });

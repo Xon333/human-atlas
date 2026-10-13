@@ -84,7 +84,13 @@ Hashes work with the existing static entry point and do not require a new router
 | Neutral context | Add `&context=1` to an objective link |
 | Full explorer | `#explorer=1`; optionally add `&structure=<catalogue-id>` and `&mesh=<mesh-id>` |
 
-`view=three-quarter|front|side|back` and `isolate=0|1` preserve the named view and isolation choice. Omitting isolation keeps a selected structure in context. A side-specific target can supply its side when the link omits one; otherwise the region default applies. A target hidden by an omitted default layer can widen that layer to `all`. An explicitly contradictory side or layer is rejected.
+`view=three-quarter|front|back|right-side|side|superior|inferior` and `isolate=0|1` preserve the named view and isolation choice. `side` retains its original camera position on anatomical left (+X); `right-side` views from anatomical right (−X). For a single-side region, the controls label these lateral or medial relative to that side. Both-side views use explicit right/left labels. Hand views name the palmar/anterior and dorsal/posterior surfaces; foot views name the dorsal/superior and plantar/inferior surfaces. These are external camera directions, not section planes.
+
+A course link without `view` opens anteriorly, or from above when its entire context belongs to the catalogue foot region. Explicit saved views take precedence. Oblique remains available. This uses public catalogue membership and requires no producer schema, catalogue pin, or authored selection changes.
+
+Selection defaults to cyan, with magenta and lime controls. The renderer applies the saturated selected colour after tone mapping, retaining surface shading and normal occlusion. Surrounding anatomy stays visible. Colour changes reuse the scene and camera; the colour is a session preference and is not encoded in study links.
+
+Omitting isolation keeps a selected structure in context. A side-specific target can supply its side when the link omits one; otherwise the region default applies. A target hidden by an omitted default layer can widen that layer to `all`. An explicitly contradictory side or layer is rejected.
 
 Legacy course links without `selection` remain valid for authored course targets and recover an authored containing selection. Membership in a region alone does not authorize a non-taught legacy link: additional source structures must name the region explicitly, and the complete target must belong to it. Explorer links remain independent of the course.
 
