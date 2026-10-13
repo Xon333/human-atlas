@@ -26,6 +26,7 @@ jobs:
       - run: npm ci
       - run: |
           npm run check
+          npm run test:search
           npm run test:course
           npm run test:runtime
           npm run test:geometry
