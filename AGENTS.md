@@ -1,7 +1,7 @@
-# Working here
+# Human Atlas
 
-Human Atlas owns the anatomy renderer, interaction, private runtime and course consumer. SpaceO owns authored course content, evidence, note paths and portable retrieval. Use [the course contract](docs/course-runtime.md) when either side changes; preserve original catalogue IDs, labels, geometry and source attribution.
+`dev` fork owning the anatomy renderer, interaction, private runtime and course consumer. [T3's project standard](https://github.com/Xon333/t3/blob/main/docs/policy/PROJECT-STANDARD.md) owns source workflow and native selections. Authored course notes remain with their content owner; [the course contract](docs/course-runtime.md) preserves catalogue IDs, labels, geometry, source attribution and exact consumer paths. Legacy SpaceO contracts do not make it a dependency of Vault0S.
 
-Reuse the [region chooser and scoped loading](docs/REGIONAL-ATLAS.md), contextual highlighting, picking and explicit full Explorer. Resolve validated routes before starting the scene; keep public catalogue regions distinct from authored course selections. The native Atlas owner has implementation authority in this domain; the cloud integration owner reconciles published work into PR #1 and the paired SpaceO PR. [Integration state](docs/NATIVE.md) separates reviewed source from the installed deployment and accepted native behavior.
+Reuse [regional loading/navigation](docs/REGIONAL-ATLAS.md), contextual highlighting, picking and the full Explorer. Resolve routes before starting the scene; distinguish public regions from authored course selections. [Native state](docs/NATIVE.md) separates source from deployed/accepted behavior; historical PR/thread labels are provenance, not new gates.
 
-Keep private courses, teaching assets, origins, credentials and local derivatives out of this public repository. Use the existing lockfile and focused affected checks; source-only documentation changes do not require redeployment or repeated memory benchmarks. Automatic Mac vault sync remains held until Otis explicitly authorizes it.
+Keep private course assets, origins, credentials and local derivatives out of this public repository. Use the existing lockfile and affected checks. Prose changes need no redeployment or memory benchmark. A source task does not resume automatic Mac vault sync.
