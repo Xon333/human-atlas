@@ -45,7 +45,7 @@ Build with the matching installed dependencies and `npm run build`; use `npm ci`
 | Runtime variable | Value |
 | --- | --- |
 | `ATLAS_COURSE_FILE` | Absolute path to the validated generated export; the accepted deployment uses an immutable private copy described in [its deployment record](REGIONAL-DEPLOYMENT.md) |
-| `ATLAS_SPACEO_ROOT` | Absolute path to the complete SpaceO checkout holding its bound sources |
+| `ATLAS_SOURCE_ROOT` | Absolute path to the private source tree containing every registered PDF, figure and capture at its exported relative path |
 | `ATLAS_VAULT_NAME` | Observed Obsidian vault name; enables exact native note links |
 | `ATLAS_VAULT_ROOT` | Repository-relative vault root, default `Notes` |
 | `ATLAS_ORIGIN` | Observed private origin for a remote hostname/IP, especially with wildcard binding or a reverse proxy |
@@ -53,7 +53,7 @@ Build with the matching installed dependencies and `npm run build`; use `npm ci`
 | `ATLAS_PORT` | Port, default `3016` |
 | `ATLAS_NOTE_BASE_URL` | Optional absolute HTTP(S) base of an existing note service resolving routes from the SpaceO repository root |
 
-Serve at the origin root, matching the established absolute `/models/` paths. These are process environment values: the Vite `.env` loader is not used by the Node runtime. Keep credentials in the existing deployment configuration. `ATLAS_ORIGIN` is a host/origin check, **not authentication**; the existing private deployment boundary controls access.
+Serve at the origin root, matching the established absolute `/models/` paths. Migrate installed `ATLAS_SPACEO_ROOT` to `ATLAS_SOURCE_ROOT` atomically with the new runtime; no legacy variable alias is provided. The source root need not be a SpaceO checkout, but must contain every registered source at its exported relative path. These are process environment values: the Vite `.env` loader is not used by the Node runtime. Keep credentials in the existing deployment configuration. `ATLAS_ORIGIN` is a host/origin check, **not authentication**; the existing private deployment boundary controls access.
 
 `GET /api/course` returns `{course, catalogBlobSha, links}` with `Cache-Control: private, no-store`. Missing configuration is a 404; rejected data is a 503. The public explorer continues to work. A replaced exporter file is revalidated on the next request; invalid updates withdraw the previous private response and source allowlist. Reload the viewer after a course update. No copied course data is stored in browser local storage, a service worker, or a build-time module.
 
@@ -61,9 +61,11 @@ The browser requests the catalogue without caching and validates the complete co
 
 ## Exact source return
 
-The runtime serves only registered binding IDs through `/api/course/sources/<binding-id>/pdf`, `/figure/<index>`, and `/capture`. PDFs retain `#page=N` and support GET/HEAD byte ranges. File paths cannot be supplied by the browser; paths, symlinks, extensions and source containment are checked. The runtime does not serve the rest of the vault or render a second copy of its notes.
+The runtime serves only registered binding IDs through `/api/course/sources/<binding-id>/pdf`, `/figure/<index>`, and `/capture`. PDFs retain `#page=N` and support GET/HEAD byte ranges. File paths cannot be supplied by the browser; paths, symlinks, extensions and source containment are checked. The runtime does not serve the rest of the source tree or render a second copy of its notes. Registered Markdown captures use `text/markdown; charset=utf-8`; original text captures retain `text/plain`.
 
-The note button uses `obsidian://open` with the configured vault and the exact, encoded vault-relative path plus heading. An optional web note base receives the exporter's repository-relative route unchanged. This must be a service that understands those exact heading fragments, not an arbitrary GitHub URL. The runtime rejects malformed configuration at startup. If a bound path cannot form a link under the configured vault root, the UI shows its exact unresolved destination while the model and PDF links stay usable. Actual vault and external note-service availability require the native check. Source links open on demand; lecture images are not downloaded into the initial viewer.
+An optional `noteBindings[id].note.canonicalUrl` supplies an authoritative canonical note return independently of the legacy `note.path`, `note.route` and `note.heading` provenance. It must be exactly `obsidian://open?vault=<encoded-name-or-ID>&file=<encoded-relative.md%23heading>` using `encodeCourseText` for each complete query value. Only one `vault` and one `file` parameter are accepted, in that order; credentials, ports, extra parameters, external schemes, absolute/traversing paths, backslashes and controls are rejected. The heading is optional but nonempty when present, and may differ from the historical heading. The exporter verifies the destination and heading against canonical sources; the consumer validates the bounded URI shape. No canonical note body enters the export or public build.
+
+When present, this canonical URL supplies the note button and displayed heading, regardless of deployment vault settings, and suppresses the legacy Reader link. Clear `ATLAS_NOTE_BASE_URL` when retiring that Reader. Without it, the note button uses `obsidian://open` with the configured vault and the exact, encoded vault-relative path plus heading. An optional web note base receives the exporter's repository-relative route unchanged. This must be a service that understands those exact heading fragments, not an arbitrary GitHub URL. The runtime rejects malformed configuration at startup. If a bound path cannot form a link under the configured vault root, the UI shows its exact unresolved destination while the model and PDF links stay usable. Actual vault and external note-service availability require the native check. Source links open on demand; lecture images are not downloaded into the initial viewer.
 
 ## Stable scene links
 

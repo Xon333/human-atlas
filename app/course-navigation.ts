@@ -1,8 +1,8 @@
 import type { Atlas, View } from './anatomy';
 import {CAMERA_VIEWS} from './camera-views.ts';
-import type { CourseOverlay } from './course';
+import type { CourseOverlay, CourseLinks, NoteSource } from './course';
 import {atlasRegions, regionForElements} from './atlas-regions.ts';
-import { encodeCourseText, spaceoRoute, validateSpaceOPath } from './course.ts';
+import { encodeCourseText, spaceoRoute, validateSpaceOPath, validateCanonicalNoteUrl } from './course.ts';
 import {regionElements, partSide, hasSourceSideConflict, type StudySide, type StudyLayer} from './study-region.ts';
 
 export interface AtlasLink {
@@ -215,6 +215,20 @@ export function publicTargetLink(atlas: Atlas, target: {structureId?: string; me
     layer = regionElements(atlas, region!.elements, side ?? 'both', 'muscles').some(id => ids.includes(id)) ? 'muscles' : 'all';
   }
   return {mode:'region', regionId:region!.id, ...target, side, layer, isolate:false};
+}
+
+/** Canonical returns take precedence over legacy derived native and Reader links. */
+export function noteSourceLinks(note: NoteSource, links: CourseLinks): {native: string | null; browser: string | null; heading: string} {
+  if (note.canonicalUrl !== undefined) {
+    const native = validateCanonicalNoteUrl(note.canonicalUrl);
+    const file = new URL(native).searchParams.get('file')!;
+    const anchor = file.indexOf('#');
+    return {native, browser:null, heading:anchor < 0 ? file : file.slice(anchor + 1)};
+  }
+  let native: string | null = null, browser: string | null = null;
+  try { if (links.vaultName) native = obsidianUrl(note.path, links.vaultName, {heading:note.heading, vaultRoot:links.vaultRoot}); } catch { /* Keep other source routes usable. */ }
+  try { if (links.noteBaseUrl) browser = spaceoSourceUrl(note.route, links.noteBaseUrl); } catch { /* Keep the exact unresolved destination visible. */ }
+  return {native, browser, heading:note.heading};
 }
 
 /** `file` includes the exact heading before URI encoding; the path is relative to the observed vault root. */

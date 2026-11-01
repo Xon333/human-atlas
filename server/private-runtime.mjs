@@ -11,7 +11,7 @@ import {approvedBuildFile,privateJson} from '../scripts/private-build-guard.mjs'
 
 const REPO_ROOT = fileURLToPath(new URL('../', import.meta.url));
 const MAX_COURSE_BYTES = 2 * 1024 * 1024;
-const MIME = {'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp','.gif':'image/gif','.pdf':'application/pdf','.txt':'text/plain; charset=utf-8','.md':'text/plain; charset=utf-8','.ico':'image/x-icon','.bin':'application/octet-stream','.gz':'application/gzip','.woff2':'font/woff2'};
+const MIME = {'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp','.gif':'image/gif','.pdf':'application/pdf','.txt':'text/plain; charset=utf-8','.md':'text/markdown; charset=utf-8','.ico':'image/x-icon','.bin':'application/octet-stream','.gz':'application/gzip','.woff2':'font/woff2'};
 const SOURCE_EXTENSIONS = {pdf:new Set(['.pdf']), figure:new Set(['.png','.jpg','.jpeg','.webp','.gif']), capture:new Set(['.txt','.md'])};
 
 export function gitBlobSha(bytes) {
@@ -46,7 +46,7 @@ export function runtimeConfig(env = process.env, repoRoot = REPO_ROOT) {
     repoRoot:path.resolve(repoRoot), distRoot:path.join(repoRoot, 'dist'),
     host:env.ATLAS_HOST || '127.0.0.1', port,
     courseFile:absoluteSetting(env.ATLAS_COURSE_FILE, 'ATLAS_COURSE_FILE'),
-    spaceoRoot:absoluteSetting(env.ATLAS_SPACEO_ROOT, 'ATLAS_SPACEO_ROOT'),
+    sourceRoot:absoluteSetting(env.ATLAS_SOURCE_ROOT, 'ATLAS_SOURCE_ROOT'),
     origin:optionalWebUrl(env.ATLAS_ORIGIN, 'ATLAS_ORIGIN', true),
     links:{vaultName:env.ATLAS_VAULT_NAME || null,vaultRoot,noteBaseUrl:optionalWebUrl(env.ATLAS_NOTE_BASE_URL, 'ATLAS_NOTE_BASE_URL')},
   };
@@ -95,7 +95,7 @@ async function createCourseStore(config, reportError) {
   async function refresh() {
     if (!config.courseFile) return {status:'absent'};
     try {
-      if (!config.spaceoRoot) throw new Error('ATLAS_SPACEO_ROOT is required when ATLAS_COURSE_FILE is set');
+      if (!config.sourceRoot) throw new Error('ATLAS_SOURCE_ROOT is required when ATLAS_COURSE_FILE is set');
       const snapshot = await realpath(config.courseFile);
       if (publicCandidate(snapshot, config) || publicCandidate(config.courseFile, config)) throw new Error('Private snapshot must remain outside public and dist');
       const info = await stat(snapshot, {bigint:true});
@@ -113,8 +113,8 @@ async function createCourseStore(config, reportError) {
       }
       const signature = `${snapshot}:${info.ino}:${info.mtimeNs}:${info.ctimeNs}:${info.size}:${catalogSignature}`;
       if (lastSignature === signature) return lastState;
-      const root = await realpath(config.spaceoRoot);
-      if (publicCandidate(root, config)) throw new Error('SpaceO source root must remain outside public and dist');
+      const root = await realpath(config.sourceRoot);
+      if (publicCandidate(root, config)) throw new Error('Course source root must remain outside public and dist');
       const raw = await boundedRead(snapshot, MAX_COURSE_BYTES);
       const course = validateCourseOverlay(JSON.parse(raw), atlas, catalogBlobSha);
       const sources = boundSources(course);

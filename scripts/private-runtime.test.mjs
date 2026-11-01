@@ -13,28 +13,28 @@ const PDF = Buffer.from('%PDF-1.4\nSynthetic PDF bytes for range checks only.\n'
 async function fixture(t,{enabled = true,mutate} = {}) {
   const temporary = await mkdtemp(path.join(os.tmpdir(),'atlas-runtime-test-'));
   const repoRoot = path.join(temporary,'atlas');
-  const spaceoRoot = path.join(temporary,'spaceo');
+  const sourceRoot = path.join(temporary,'sources');
   const distRoot = path.join(repoRoot,'dist');
-  const courseFile = path.join(spaceoRoot,'.spaceo','tmp','human-atlas-course.json');
+  const courseFile = path.join(sourceRoot,'.spaceo','tmp','human-atlas-course.json');
   const data = createCourseFixture();
   if (mutate) mutate(data);
-  for (const directory of [path.join(distRoot,'models'),path.join(distRoot,'assets'),path.dirname(courseFile),path.join(spaceoRoot,'Notes','Example')]) await mkdir(directory,{recursive:true});
+  for (const directory of [path.join(distRoot,'models'),path.join(distRoot,'assets'),path.dirname(courseFile),path.join(sourceRoot,'Notes','Example')]) await mkdir(directory,{recursive:true});
   await writeFile(path.join(distRoot,'models','atlas.json'),data.rawCatalog);
   await writeFile(path.join(distRoot,'index.html'),'<!doctype html><title>Synthetic explorer</title>');
   await writeFile(path.join(distRoot,'assets','app-test.js'),'console.log("synthetic")');
   await writeFile(courseFile,JSON.stringify(data.course));
-  await mkdir(path.dirname(path.join(spaceoRoot,data.binding.courseSource.path)),{recursive:true});
-  await writeFile(path.join(spaceoRoot,data.binding.courseSource.path),PDF);
-  await writeFile(path.join(spaceoRoot,data.binding.figures[0].path),'Synthetic image bytes');
-  await writeFile(path.join(spaceoRoot,data.binding.capture.path),'Synthetic original capture');
-  await writeFile(path.join(spaceoRoot,data.binding.note.path),`# ${data.binding.note.heading}\nSynthetic note, never served.`);
-  await writeFile(path.join(spaceoRoot,'not-allowlisted.txt'),'MUST_NOT_SERVE');
+  await mkdir(path.dirname(path.join(sourceRoot,data.binding.courseSource.path)),{recursive:true});
+  await writeFile(path.join(sourceRoot,data.binding.courseSource.path),PDF);
+  await writeFile(path.join(sourceRoot,data.binding.figures[0].path),'Synthetic image bytes');
+  await writeFile(path.join(sourceRoot,data.binding.capture.path),'Synthetic original capture');
+  await writeFile(path.join(sourceRoot,data.binding.note.path),`# ${data.binding.note.heading}\nSynthetic note, never served.`);
+  await writeFile(path.join(sourceRoot,'not-allowlisted.txt'),'MUST_NOT_SERVE');
   const errors = [];
-  const config = runtimeConfig({ATLAS_PORT:'0',...(enabled?{ATLAS_COURSE_FILE:courseFile,ATLAS_SPACEO_ROOT:spaceoRoot}:{}),ATLAS_VAULT_NAME:'Synthetic vault'},repoRoot);
+  const config = runtimeConfig({ATLAS_PORT:'0',...(enabled?{ATLAS_COURSE_FILE:courseFile,ATLAS_SOURCE_ROOT:sourceRoot}:{}),ATLAS_VAULT_NAME:'Synthetic vault'},repoRoot);
   const {server} = await createPrivateServer({...config,onError:error=>errors.push(error.message)});
   await new Promise((resolve,reject)=>{server.once('error',reject); server.listen(0,'127.0.0.1',resolve);});
   t.after(async()=>{server.closeAllConnections();await new Promise(resolve=>server.close(resolve));await rm(temporary,{recursive:true,force:true});});
-  return {...data,temporary,repoRoot,spaceoRoot,courseFile,distRoot,errors,server,url:`http://127.0.0.1:${server.address().port}`};
+  return {...data,temporary,repoRoot,sourceRoot,courseFile,distRoot,errors,server,url:`http://127.0.0.1:${server.address().port}`};
 }
 async function replaceCourse(f,course) {
   const temporary = `${f.courseFile}.new`;
@@ -54,7 +54,9 @@ test('runtime settings default to loopback and reject unsafe/path or URL configu
   const config=runtimeConfig({});
   assert.equal(config.host,'127.0.0.1');assert.equal(config.port,3016);assert.equal(config.courseFile,null);
   assert.equal(config.links.vaultRoot,'Notes');
-  for (const env of [{ATLAS_COURSE_FILE:'relative.json'},{ATLAS_SPACEO_ROOT:'relative'},{ATLAS_VAULT_ROOT:'../Notes'},{ATLAS_ORIGIN:'https://user:password@example.invalid'},{ATLAS_ORIGIN:'https://example.invalid/path'},{ATLAS_NOTE_BASE_URL:'javascript:alert(1)'},{ATLAS_PORT:'-1'}]) assert.throws(()=>runtimeConfig(env));
+  assert.equal(config.sourceRoot,null);
+  assert.equal(runtimeConfig({ATLAS_SOURCE_ROOT:'/canonical/sources'}).sourceRoot,'/canonical/sources');
+  for (const env of [{ATLAS_COURSE_FILE:'relative.json'},{ATLAS_SOURCE_ROOT:'relative'},{ATLAS_VAULT_ROOT:'../Notes'},{ATLAS_ORIGIN:'https://user:password@example.invalid'},{ATLAS_ORIGIN:'https://example.invalid/path'},{ATLAS_NOTE_BASE_URL:'javascript:alert(1)'},{ATLAS_PORT:'-1'}]) assert.throws(()=>runtimeConfig(env));
   assert.equal(runtimeConfig({ATLAS_ORIGIN:'https://private.example.invalid',ATLAS_VAULT_ROOT:'Notes/Example'}).origin,'https://private.example.invalid');
 });
 
@@ -67,6 +69,18 @@ test('unconfigured runtime keeps explorer and reloads working; private endpoints
   assert.equal((await fetch(`${f.url}/models/missing.bin`)).status,404);
   assert.equal((await fetch(`${f.url}/api/unknown`)).status,404);
   assert.equal((await fetch(`${f.url}/.env`)).status,404);
+});
+
+test('registered Markdown captures retain Markdown MIME and source privacy',async t=>{
+  const f=await fixture(t,{mutate:data=>{
+    data.binding.capture.path='Notes/Example/capture.md';
+    data.binding.capture.route=spaceoRoute(data.binding.capture.path);
+  }});
+  const response=await fetch(`${f.url}/api/course/sources/sample/capture`);
+  assert.equal(response.status,200);
+  assert.equal(response.headers.get('content-type'),'text/markdown; charset=utf-8');
+  assert.match(response.headers.get('cache-control'),/no-store/);
+  assert.equal(await response.text(),'Synthetic original capture');
 });
 
 test('validated runtime returns actual catalogue hash and exact allowlisted sources',async t=>{
@@ -102,7 +116,7 @@ test('PDF GET/HEAD single-byte ranges, suffix ranges, bounds and invalid ranges'
 test('snapshot replacement reloads; malformed/rejected update fails closed without stale private data',async t=>{
   const f=await fixture(t);assert.equal((await fetch(`${f.url}/api/course`)).status,200);
   await replaceCourse(f,'{broken json');
-  for (const route of ['/api/course','/api/course/sources/sample/pdf']) {const response=await fetch(f.url+route);assert.equal(response.status,503);const text=await response.text();assert.equal(text.includes(f.spaceoRoot),false);assert.equal(text.includes(f.course.label),false);}
+  for (const route of ['/api/course','/api/course/sources/sample/pdf']) {const response=await fetch(f.url+route);assert.equal(response.status,503);const text=await response.text();assert.equal(text.includes(f.sourceRoot),false);assert.equal(text.includes(f.course.label),false);}
   assert.equal((await fetch(`${f.url}/`)).status,200);
   const updated=structuredClone(f.course);updated.label='Synthetic updated fixture';await replaceCourse(f,updated);
   const next=await (await fetch(`${f.url}/api/course`)).json();assert.equal(next.course.label,updated.label);
@@ -119,7 +133,7 @@ test('runtime rejects exact catalogue-byte drift, including a deployment changed
 
 test('source path/symlink containment fails closed both before import and after import',async t=>{
   const f=await fixture(t);assert.equal((await fetch(`${f.url}/api/course`)).status,200);
-  const pdf=path.join(f.spaceoRoot,f.binding.courseSource.path);
+  const pdf=path.join(f.sourceRoot,f.binding.courseSource.path);
   const outside=path.join(f.temporary,'outside.pdf');await writeFile(outside,'MUST_NOT_SERVE');await unlink(pdf);await symlink(outside,pdf);
   const response=await fetch(`${f.url}/api/course/sources/sample/pdf`);assert.equal(response.status,404);assert.equal((await response.text()).includes('MUST_NOT_SERVE'),false);
   await replaceCourse(f,f.course);assert.equal((await fetch(`${f.url}/api/course`)).status,503);

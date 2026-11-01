@@ -8,7 +8,7 @@ import {partSide, hasSourceSideConflict, type StudySide, type StudyLayer} from '
 import type {CourseOverlay, CourseLinks, CourseConcept, CourseSelection, UnmappedObjective, Evidence, Laterality} from './course';
 import {RegionControls} from './region-controls';
 import {matchesSearch,sourcePdfLabel} from './search';
-import {obsidianUrl, spaceoSourceUrl} from './course-navigation';
+import {noteSourceLinks} from './course-navigation';
 
 const SIDES: Record<Laterality, string> = {right: 'Desno', left: 'Levo', bilateral: 'Obe strani', midline: 'Sredinska'};
 const EVIDENCE: Record<Evidence, string> = {'course-material': 'Učno gradivo', 'student-reported-emphasis': 'Poudarek · zapis študenta', bonus: 'Dodatno · bonus'};
@@ -57,13 +57,10 @@ function SourceLinks({course, links, ids}: {course: CourseOverlay; links: Course
     {ids.map(id => {
       const binding = course.noteBindings[id];
       if (!binding) return null;
-      let native: string | null = null, browser: string | null = null;
-      // Optional deployment links must not take down valid anatomy or source PDFs.
-      try {if (links.vaultName) native = obsidianUrl(binding.note.path, links.vaultName, {heading: binding.note.heading, vaultRoot: links.vaultRoot});} catch { /* Show the exact unresolved note below. */ }
-      try {if (links.noteBaseUrl) browser = spaceoSourceUrl(binding.note.route, links.noteBaseUrl);} catch { /* Keep other source routes usable. */ }
+      const {native, browser, heading} = noteSourceLinks(binding.note, links);
       const base = `/api/course/sources/${encodeURIComponent(id)}`;
       return <div className="course-source-binding" key={id}>
-        <span className="source-heading">{binding.note.heading}</span>
+        <span className="source-heading">{heading}</span>
         <div className="course-source-actions">
           {native && <a href={native}><BookOpen size={13}/> Zapisek</a>}
           {browser && <a href={browser} target="_blank" rel="noreferrer">{native ? 'Zapisek v brskalniku' : 'Zapisek'} <ArrowUpRight size={12}/></a>}

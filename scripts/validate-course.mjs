@@ -2,8 +2,8 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { createCourseFixture } from './course-fixture.mjs';
-import { CourseValidationError, validateCourseOverlay, spaceoRoute } from '../app/course.ts';
-import { AtlasLinkError, parseAtlasLink, serializeAtlasLink, resolveAtlasLink, obsidianUrl, spaceoSourceUrl, courseSourceUrl } from '../app/course-navigation.ts';
+import { CourseValidationError, validateCourseOverlay, spaceoRoute, encodeCourseText } from '../app/course.ts';
+import { AtlasLinkError, parseAtlasLink, serializeAtlasLink, resolveAtlasLink, obsidianUrl, spaceoSourceUrl, courseSourceUrl, noteSourceLinks } from '../app/course-navigation.ts';
 
 let checks = 0;
 function test(name, run) {
@@ -170,6 +170,35 @@ test('asset links use binding-key allowlists and exact PDF page anchors', () => 
   assert.throws(() => courseSourceUrl('..', 'pdf'), /binding ID/);
   assert.throws(() => courseSourceUrl('sample', 'figure', { index: -1 }), /index/);
   assert.throws(() => courseSourceUrl('sample', 'capture', { page: 1 }), /page/);
+});
+
+test('canonical note return preserves its own exact path and heading and suppresses legacy Reader links', () => {
+  const f = createCourseFixture();
+  const file = "UNI/Anatomija/Živ canonical.md#Novo poglavje: 'A'";
+  const canonicalUrl = `obsidian://open?vault=0123456789abcdef&file=${encodeCourseText(file)}`;
+  f.binding.note.canonicalUrl = canonicalUrl;
+  const course = validateCourseOverlay(f.course, f.atlas, f.catalogBlobSha);
+  assert.equal(course.noteBindings.sample.note.canonicalUrl, canonicalUrl);
+  assert.equal(course.noteBindings.sample.note.route, f.binding.note.route);
+  assert.deepEqual(noteSourceLinks(course.noteBindings.sample.note, {vaultName:'Legacy', vaultRoot:'Notes', noteBaseUrl:'https://example.invalid/spaceo'}), {native:canonicalUrl, browser:null, heading:"Novo poglavje: 'A'"});
+  assert.equal(noteSourceLinks(course.noteBindings.sample.note, {vaultName:null, vaultRoot:'Notes', noteBaseUrl:null}).native, canonicalUrl);
+});
+for (const canonicalUrl of [
+  'javascript:alert(1)', 'https://example.invalid/note.md', 'obsidian://new?vault=V&file=note.md',
+  'obsidian://open?vault=V&file=note.md&silent=true', 'obsidian://open?vault=V&vault=W&file=note.md',
+  'obsidian://user@open?vault=V&file=note.md', 'obsidian://open?vault=V&file=%2Fnote.md',
+  'obsidian://open?vault=V&file=..%2Fnote.md', 'obsidian://open?vault=V&file=dir%5Cnote.md',
+  'obsidian://open?vault=V&file=note.md%00', 'obsidian://open?vault=V&file=note.pdf',
+  'obsidian://open?vault=V&file=note.md%23', 'obsidian://open?vault=V&file=note.md#heading',
+  'obsidian://open?vault=V&file=C%3A%2Fnote.md', 'obsidian://open?vault=V&file=dir%2F..%2Fnote.md',
+  'obsidian://open?vault=V&file=dir%2F%2Fnote.md', 'obsidian://open?vault=V&file=note.md%0A',
+]) rejectCourse('unsafe canonical note return is refused', f => { f.binding.note.canonicalUrl = canonicalUrl; });
+test('legacy note returns remain available when no canonical return was supplied', () => {
+  const f = createCourseFixture();
+  const links = {vaultName:'Synthetic vault', vaultRoot:'Notes', noteBaseUrl:'https://example.invalid/reader'};
+  const result = noteSourceLinks(f.binding.note, links);
+  assert.equal(result.native, obsidianUrl(f.binding.note.path, links.vaultName, {heading:f.binding.note.heading}));
+  assert.equal(result.browser, spaceoSourceUrl(f.binding.note.route, links.noteBaseUrl));
 });
 
 console.log(`Course validation: ${checks} checks passed (public synthetic fixtures only).`);

@@ -6,7 +6,7 @@ export type Evidence = 'course-material' | 'student-reported-emphasis' | 'bonus'
 export type Laterality = 'right' | 'left' | 'bilateral' | 'midline';
 export interface CourseLabels { sl: string; la: string }
 export interface SourceFile { path: string; route: string }
-export interface NoteSource extends SourceFile { heading: string }
+export interface NoteSource extends SourceFile { heading: string; canonicalUrl?: string }
 export interface PdfSource extends SourceFile { page: number }
 export interface FigureSource extends SourceFile { laterality?: Laterality }
 export interface NoteBinding {
@@ -113,6 +113,19 @@ function httpsUrl(value: unknown, context: string): string {
 export function encodeCourseText(value: string): string {
   return encodeURIComponent(value).replace(/[!'()*]/g, char => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
 }
+/** Explicit canonical note returns are limited to Obsidian's vault/file open command. */
+export function validateCanonicalNoteUrl(value: unknown): string {
+  const result = text(value, 'Canonical note URL');
+  let url: URL;
+  try { url = new URL(result); } catch { throw new CourseValidationError('Invalid canonical note URL'); }
+  const entries = [...url.searchParams];
+  const vault = text(url.searchParams.get('vault'), 'Canonical vault'), file = text(url.searchParams.get('file'), 'Canonical file');
+  requireValue(url.protocol === 'obsidian:' && url.host === 'open' && !url.username && !url.password && !url.pathname && !url.hash && entries.length === 2 && entries.every(([key]) => key === 'vault' || key === 'file'), 'Canonical note URL: expected obsidian://open with exactly vault and file');
+  const [path, ...heading] = file.split('#');
+  requireValue(!/[\u0000-\u001f\u007f]/u.test(vault + file) && !path.includes('\\') && !/^[a-z]:/i.test(path) && path.split('/').every(part => part && part !== '.' && part !== '..') && path.toLowerCase().endsWith('.md') && (!heading.length || heading.join('#').trim()), 'Canonical note URL: expected a vault-relative Markdown path and optional nonempty heading');
+  requireValue(result === `obsidian://open?vault=${encodeCourseText(vault)}&file=${encodeCourseText(file)}`, 'Canonical note URL: preserve exact encoded vault, path and heading');
+  return result;
+}
 export function validateSpaceOPath(value: unknown, exportedPdf = false): string {
   const path = text(value, 'SpaceO path');
   const parts = path.split('/');
@@ -138,7 +151,7 @@ function source(value: unknown, context: string, kind: 'note' | 'pdf' | 'figure'
     requireValue(path.endsWith('.md'), `${context}: expected Markdown`);
     const heading = text(item.heading, `${context}.heading`);
     requireValue(result.route === spaceoRoute(path, { heading }), `${context}: route must preserve the exact encoded heading`);
-    return { ...result, heading };
+    return { ...result, heading, ...(item.canonicalUrl === undefined ? {} : {canonicalUrl: validateCanonicalNoteUrl(item.canonicalUrl)}) };
   }
   if (kind === 'pdf') {
     requireValue(path.toLowerCase().endsWith('.pdf'), `${context}: expected PDF`);
